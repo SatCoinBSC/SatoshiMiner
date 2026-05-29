@@ -2,149 +2,481 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Satoshi (SAT) - PoW 挖矿终端</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Satoshi Miner - BSC PoW Mining Client</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#0a0a0c;--bg2:#111116;--bg3:#18181f;--bg4:#1e1e28;
-  --amber:#f0a500;--amber2:#d4940a;--amber-glow:rgba(240,165,0,.15);
-  --green:#00e676;--red:#ff3d3d;--dim:#555568;--text:#c8c8d4;
-  --font-mono:'JetBrains Mono',monospace;--font-display:'Orbitron',sans-serif;
+  --bg:#0d1117;--bg-card:#161b22;--bg-card2:#1c2333;--bg-input:#0d1117;--bg-hover:#21262d;
+  --accent:#f7931a;--accent-dark:#e8850f;--accent-glow:rgba(247,147,26,.15);
+  --green:#3fb950;--green-dim:#238636;--red:#f85149;--red-dim:#da3633;
+  --blue:#58a6ff;--purple:#bc8cff;
+  --text:#e6edf3;--text2:#8b949e;--text3:#484f58;
+  --border:#30363d;--border-light:#3d444d;
+  --font-mono:'JetBrains Mono','Consolas',monospace;--font-display:'Orbitron',sans-serif;
 }
-html{font-size:14px;background:var(--bg);color:var(--text);font-family:var(--font-mono)}
-body{min-height:100vh;overflow-x:hidden;position:relative}
-body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,.008) 2px,rgba(255,255,255,.008) 4px);pointer-events:none;z-index:9999}
-
-/* Layout */
-.shell{max-width:920px;margin:0 auto;padding:20px 16px 40px}
-.header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid rgba(240,165,0,.12);margin-bottom:24px;flex-wrap:wrap;gap:12px}
-.logo{font-family:var(--font-display);font-size:1.5rem;font-weight:800;letter-spacing:3px;color:var(--amber);text-shadow:0 0 20px rgba(240,165,0,.3)}
-.logo span{color:var(--dim);font-weight:400;font-size:.7rem;letter-spacing:1px;display:block;margin-top:2px;font-family:var(--font-mono)}
-
-/* Connect button */
-.btn-connect{background:transparent;border:1px solid var(--amber);color:var(--amber);font-family:var(--font-mono);font-size:.8rem;padding:8px 20px;cursor:pointer;letter-spacing:1px;transition:all .2s;position:relative;overflow:hidden}
-.btn-connect:hover{background:var(--amber);color:var(--bg);box-shadow:0 0 20px rgba(240,165,0,.3)}
-.btn-connect.connected{border-color:var(--green);color:var(--green)}
-.btn-connect.connected:hover{background:var(--green);color:var(--bg)}
-.wallet-info{font-size:.75rem;color:var(--dim);text-align:right}
-.wallet-info .addr{color:var(--text);font-size:.8rem}
-.wallet-info .bal{color:var(--amber);font-size:.85rem;font-weight:600}
-
-/* Panels */
-.panel{background:var(--bg2);border:1px solid rgba(255,255,255,.04);padding:20px;margin-bottom:16px;position:relative}
-.panel::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:var(--amber);opacity:.4}
-.panel-title{font-family:var(--font-display);font-size:.65rem;letter-spacing:3px;color:var(--amber2);margin-bottom:16px;text-transform:uppercase}
-
-/* Data grid */
-.data-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
-.data-cell{padding:10px 12px;background:var(--bg3);border-left:2px solid rgba(240,165,0,.1)}
-.data-cell .label{font-size:.6rem;color:var(--dim);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px}
-.data-cell .value{font-size:1rem;font-weight:600;color:var(--text);word-break:break-all}
-.data-cell .value.amber{color:var(--amber)}
-.data-cell .value.green{color:var(--green)}
-
-/* Mining button */
-.mine-section{text-align:center;padding:28px 0}
-.btn-mine{font-family:var(--font-display);font-size:1rem;letter-spacing:4px;padding:16px 48px;border:2px solid var(--amber);background:transparent;color:var(--amber);cursor:pointer;transition:all .3s;position:relative;text-transform:uppercase;font-weight:700}
-.btn-mine:hover{background:rgba(240,165,0,.08);box-shadow:0 0 30px rgba(240,165,0,.15)}
-.btn-mine:disabled{opacity:.3;cursor:not-allowed}
-.btn-mine.mining{border-color:var(--red);color:var(--red);animation:pulse-red 2s infinite}
-.btn-mine.mining:hover{background:rgba(255,61,61,.08);box-shadow:0 0 30px rgba(255,61,61,.15)}
-@keyframes pulse-red{0%,100%{box-shadow:0 0 5px rgba(255,61,61,.1)}50%{box-shadow:0 0 25px rgba(255,61,61,.25)}}
-
-/* Hash visualization */
-.hash-viz{margin:16px 0;height:36px;background:var(--bg3);overflow:hidden;position:relative;font-size:.65rem;line-height:36px;color:var(--dim);letter-spacing:1px;padding:0 12px;white-space:nowrap;text-overflow:ellipsis}
-.hash-viz.active{color:var(--amber);text-shadow:0 0 6px rgba(240,165,0,.3)}
-.hash-viz .found{color:var(--green);text-shadow:0 0 10px rgba(0,230,118,.4)}
-
-/* Mining stats bar */
-.stats-bar{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:12px 0}
-.stat{text-align:center}
-.stat .s-val{font-family:var(--font-display);font-size:1.2rem;color:var(--amber);font-weight:600}
-.stat .s-label{font-size:.55rem;color:var(--dim);letter-spacing:2px;margin-top:2px;text-transform:uppercase}
-
-/* Log */
-.log-panel{background:var(--bg2);border:1px solid rgba(255,255,255,.04);position:relative}
-.log-panel::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:var(--amber);opacity:.2}
-.log-header{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);display:flex;justify-content:space-between;align-items:center}
-.log-header span{font-family:var(--font-display);font-size:.6rem;letter-spacing:3px;color:var(--amber2);text-transform:uppercase}
-.log-clear{font-size:.65rem;color:var(--dim);background:none;border:none;cursor:pointer;font-family:var(--font-mono)}
-.log-clear:hover{color:var(--text)}
-.log-body{height:200px;overflow-y:auto;padding:8px 16px;font-size:.72rem;line-height:1.7}
+html{font-size:14px;background:var(--bg);color:var(--text);font-family:var(--font-mono);-webkit-tap-highlight-color:transparent}
+body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-direction:column}
+.app-shell{display:flex;min-height:100vh;min-height:100dvh}
+.sidebar{width:220px;min-width:220px;background:var(--bg-card);display:flex;flex-direction:column;border-right:1px solid var(--border);overflow-y:auto}
+.sidebar-logo{padding:20px 16px;display:flex;align-items:center;gap:10px}
+.sidebar-logo .logo-icon{width:42px;height:42px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:900;color:#000;font-family:var(--font-display);flex-shrink:0}
+.sidebar-logo .logo-text{display:flex;flex-direction:column}
+.sidebar-logo .logo-title{font-size:1rem;font-weight:700;color:#fff;font-family:var(--font-display);letter-spacing:1px}
+.sidebar-logo .logo-sub{font-size:.6rem;color:var(--text3);margin-top:2px}
+.sidebar-sep{height:1px;background:var(--border);margin:0 16px}
+.sidebar-status{padding:12px 16px;display:flex;align-items:center;gap:8px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--red-dim);flex-shrink:0;transition:background .3s}
+.status-dot.connected{background:var(--green)}
+.sidebar-status .status-text{font-size:.8rem;color:var(--text2)}
+.sidebar-nav{padding:8px 0;flex:1}
+.nav-item{display:flex;align-items:center;gap:8px;padding:10px 20px;cursor:pointer;transition:background .15s;border-left:3px solid transparent;color:var(--text2);font-size:.85rem;user-select:none}
+.nav-item:hover{background:var(--bg-hover)}
+.nav-item.active{background:var(--bg-card2);border-left-color:var(--accent);color:#fff;font-weight:600}
+.nav-item .nav-icon{font-size:1.1rem;width:24px;text-align:center;color:var(--text3)}
+.nav-item.active .nav-icon{color:var(--accent)}
+.sidebar-bottom{padding:12px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.lang-btn{background:var(--bg-card2);border:none;color:var(--text2);font-family:var(--font-mono);font-size:.75rem;padding:4px 12px;cursor:pointer;border-radius:4px}
+.lang-btn:hover{color:var(--accent);background:var(--bg-hover)}
+.version-text{font-size:.65rem;color:var(--text3)}
+.content-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.content-topbar{padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.page-title{font-size:1.3rem;font-weight:700;color:#fff}
+.mining-badge{font-size:.7rem;font-weight:600;padding:4px 12px;background:var(--bg-card2);color:var(--text3);border-radius:4px;letter-spacing:1px}
+.mining-badge.active{color:var(--green);background:rgba(63,185,80,.1)}
+.content-body{flex:1;overflow-y:auto;padding:16px 24px 32px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px}
+.card-header{display:flex;align-items:center;gap:8px;margin-bottom:0}
+.card-header .card-icon{font-size:1.1rem;color:var(--accent)}
+.card-header .card-title{font-size:.95rem;font-weight:700;color:#fff}
+.card-header .card-action{margin-left:auto}
+.card-sep{height:1px;background:var(--border);margin:12px 0}
+.form-label{font-size:.75rem;font-weight:600;color:var(--text2);margin-bottom:4px;display:block}
+.form-input{width:100%;background:var(--bg-input);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:.85rem;padding:10px 12px;border-radius:4px;outline:none;transition:border-color .2s}
+.form-input:focus{border-color:var(--accent)}
+.form-input::placeholder{color:var(--text3)}
+.input-row{display:flex;gap:8px;align-items:stretch}
+.input-row .form-input{flex:1}
+.btn{font-family:var(--font-mono);font-size:.85rem;padding:10px 20px;border:none;cursor:pointer;border-radius:4px;transition:all .2s;font-weight:600}
+.btn-accent{background:var(--accent);color:#000}
+.btn-accent:hover{background:var(--accent-dark)}
+.btn-ghost{background:var(--bg-card2);color:var(--text2);border:1px solid var(--border)}
+.btn-ghost:hover{color:var(--text);border-color:var(--border-light)}
+.btn-full{width:100%;display:block}
+.btn-mine-main{font-family:var(--font-display);font-size:1.1rem;letter-spacing:3px;padding:16px 24px;text-transform:uppercase;font-weight:700;width:100%;border-radius:4px}
+.btn-mine-main.mining{background:var(--red);color:#fff}
+.btn-mine-main.mining:hover{background:var(--red-dim)}
+.balance-hero{display:flex;align-items:center;gap:12px;padding:8px 0}
+.balance-hero .btc-icon{font-size:2rem;color:var(--accent)}
+.balance-hero .bal-big{font-size:1.6rem;font-weight:700;color:#fff}
+.balance-hero .bal-addr{font-size:.72rem;color:var(--text3);word-break:break-all}
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.stat-cell{background:var(--bg-card2);padding:10px 14px;border-radius:4px}
+.stat-cell .stat-label{font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
+.stat-cell .stat-value{font-size:.95rem;font-weight:700;color:var(--text);word-break:break-all}
+.stat-cell .stat-value.accent{color:var(--accent)}
+.stat-cell .stat-value.green{color:var(--green)}
+.stat-cell .stat-value.blue{color:var(--blue)}
+.mine-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:16px}
+.mine-stat{background:var(--bg-card2);padding:10px 14px;border-radius:4px;text-align:center}
+.mine-stat .ms-val{font-size:1.2rem;font-weight:700;font-family:var(--font-display)}
+.mine-stat .ms-val.green{color:var(--green)}
+.mine-stat .ms-val.accent{color:var(--accent)}
+.mine-stat .ms-val.blue{color:var(--blue)}
+.mine-stat .ms-label{font-size:.55rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.hash-viz{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px 12px;margin:12px 0;font-size:.7rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:38px;line-height:18px}
+.hash-viz.active{color:var(--accent)}
+.hash-viz .found{color:var(--green);font-weight:600}
+.log-body{background:var(--bg);border:1px solid var(--border);border-radius:4px;height:220px;overflow-y:auto;padding:8px 12px;font-size:.72rem;line-height:1.8}
 .log-body::-webkit-scrollbar{width:4px}
-.log-body::-webkit-scrollbar-track{background:var(--bg3)}
-.log-body::-webkit-scrollbar-thumb{background:var(--amber2);border-radius:2px}
-.log-line{opacity:0;animation:fadeIn .3s forwards}
+.log-body::-webkit-scrollbar-track{background:var(--bg-card2)}
+.log-body::-webkit-scrollbar-thumb{background:var(--accent-dark);border-radius:2px}
+.log-line{animation:fadeIn .3s forwards;opacity:0}
 @keyframes fadeIn{to{opacity:1}}
-.log-line .time{color:var(--dim)}
+.log-line .time{color:var(--text3)}
 .log-line.info .msg{color:var(--text)}
 .log-line.success .msg{color:var(--green)}
 .log-line.error .msg{color:var(--red)}
-.log-line.warn .msg{color:var(--amber)}
-.log-line.hash .msg{color:var(--dim);font-size:.65rem}
-
-/* Responsive */
-@media(max-width:600px){
-  .header{flex-direction:column;align-items:flex-start}
-  .wallet-info{text-align:left}
-  .data-grid{grid-template-columns:repeat(2,1fr)}
-  .btn-mine{padding:14px 32px;font-size:.85rem}
-  .stats-bar{gap:16px}
-  .log-body{height:160px}
+.log-line.warn .msg{color:var(--accent)}
+.history-table{width:100%;font-size:.75rem;border-collapse:collapse}
+.history-table th{text-align:left;padding:8px 6px;color:var(--accent);font-size:.6rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border);font-weight:700}
+.history-table td{padding:8px 6px;border-bottom:1px solid rgba(48,54,61,.5);color:var(--text2);vertical-align:middle}
+.history-table .status-ok{color:var(--green);font-weight:600}
+.history-table .status-fail{color:var(--red);font-weight:600}
+.history-table .status-skip{color:var(--accent);font-weight:600}
+.history-table .tx-link{color:var(--blue);text-decoration:none}
+.history-table .tx-link:hover{text-decoration:underline}
+.no-records{text-align:center;padding:40px 0;color:var(--text3);font-size:.85rem}
+.info-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(48,54,61,.3)}
+.info-row:last-child{border-bottom:none}
+.info-row .info-key{color:var(--text2);font-weight:600;font-size:.85rem}
+.info-row .info-val{color:#fff;font-weight:600;font-size:.85rem;word-break:break-all;text-align:right;max-width:60%}
+.about-text{color:var(--text2);font-size:.8rem;line-height:1.8;white-space:pre-line}
+.panel{display:none}
+.panel.active{display:block}
+.mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg-card);border-top:1px solid var(--border);z-index:100;padding-bottom:env(safe-area-inset-bottom,0)}
+.mobile-nav-inner{display:flex;justify-content:space-around;align-items:center}
+.mobile-nav-item{display:flex;flex-direction:column;align-items:center;padding:8px 0;cursor:pointer;color:var(--text3);font-size:.55rem;gap:2px;flex:1;user-select:none}
+.mobile-nav-item .m-icon{font-size:1.2rem}
+.mobile-nav-item.active{color:var(--accent)}
+.mobile-header{display:none;padding:12px 16px;background:var(--bg-card);border-bottom:1px solid var(--border);align-items:center;justify-content:space-between}
+.mobile-header .mh-logo{display:flex;align-items:center;gap:8px}
+.mobile-header .mh-logo .logo-icon{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:900;color:#000;font-family:var(--font-display)}
+.mobile-header .mh-title{font-size:.9rem;font-weight:700;color:#fff;font-family:var(--font-display)}
+.mobile-header .mh-right{display:flex;align-items:center;gap:8px}
+@media(max-width:768px){
+  .sidebar{display:none}
+  .mobile-nav{display:block}
+  .mobile-header{display:flex}
+  .content-topbar{padding:10px 16px}
+  .content-body{padding:12px 16px 100px}
+  .page-title{font-size:1.1rem}
+  .balance-hero .bal-big{font-size:1.2rem}
+  .mine-stats-row{grid-template-columns:repeat(3,1fr)}
+  .mine-stat .ms-val{font-size:1rem}
+  .btn-mine-main{font-size:.9rem;padding:14px 20px}
+  .log-body{height:180px}
+  .card{padding:16px}
+  .history-table{font-size:.65rem}
+  .history-table th,.history-table td{padding:6px 4px}
 }
-
-/* Noise overlay */
-body::after{content:'';position:fixed;inset:0;opacity:.03;background:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");pointer-events:none;z-index:9998}
+@media(max-width:400px){
+  .stats-grid{grid-template-columns:1fr}
+  .mine-stats-row{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
-<div class="shell">
-  <div class="header">
-    <div class="logo">SATOSHI<span>PoW 挖矿终端 · BSC</span></div>
-    <div style="display:flex;align-items:center;gap:16px">
-      <div class="wallet-info" id="walletInfo" style="display:none">
-        <div class="addr" id="addrDisplay"></div>
-        <div class="bal" id="balDisplay">0 SAT</div>
+<!-- Mobile Header -->
+<div class="mobile-header" id="mobileHeader">
+  <div class="mh-logo">
+    <div class="logo-icon">S</div>
+    <span class="mh-title">Satoshi Miner</span>
+  </div>
+  <div class="mh-right">
+    <div class="status-dot" id="mStatusDot"></div>
+    <button class="lang-btn" onclick="toggleLang()" id="mLangBtn">中文</button>
+  </div>
+</div>
+
+<div class="app-shell">
+  <!-- Sidebar (Desktop) -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">S</div>
+      <div class="logo-text">
+        <div class="logo-title">Satoshi Miner</div>
+        <div class="logo-sub" data-i18n="subtitle">BSC PoW Mining Client</div>
       </div>
-      <button class="btn-connect" id="btnConnect" onclick="connectWallet()">连接钱包</button>
+    </div>
+    <div class="sidebar-sep"></div>
+    <div class="sidebar-status">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText" data-i18n="not_connected">Disconnected</span>
+    </div>
+    <div class="sidebar-sep"></div>
+    <div class="sidebar-nav">
+      <div class="nav-item active" data-tab="wallet" onclick="showPanel('wallet')">
+        <span class="nav-icon">&#x229A;</span><span data-i18n="tab_wallet">Wallet</span>
+      </div>
+      <div class="nav-item" data-tab="mine" onclick="showPanel('mine')">
+        <span class="nav-icon">&#x26CF;</span><span data-i18n="tab_mine">Mine</span>
+      </div>
+      <div class="nav-item" data-tab="history" onclick="showPanel('history')">
+        <span class="nav-icon">&#x2630;</span><span data-i18n="tab_history">History</span>
+      </div>
+      <div class="nav-item" data-tab="settings" onclick="showPanel('settings')">
+        <span class="nav-icon">&#x2699;</span><span data-i18n="tab_settings">Settings</span>
+      </div>
+    </div>
+    <div class="sidebar-bottom">
+      <button class="lang-btn" onclick="toggleLang()" id="langBtn">中文</button>
+      <span class="version-text">v2.0.0</span>
     </div>
   </div>
 
-  <div class="panel">
-    <div class="panel-title">链上参数</div>
-    <div class="data-grid">
-      <div class="data-cell"><div class="label">Epoch</div><div class="value" id="vEpoch">--</div></div>
-      <div class="data-cell"><div class="label">难度</div><div class="value" id="vDiff">--</div></div>
-      <div class="data-cell"><div class="label">目标</div><div class="value" id="vTarget">--</div></div>
-      <div class="data-cell"><div class="label">区块奖励</div><div class="value amber" id="vReward">--</div></div>
-      <div class="data-cell"><div class="label">已铸造</div><div class="value" id="vMinted">--</div></div>
-      <div class="data-cell"><div class="label">最大供应</div><div class="value" id="vMax">21,000,000</div></div>
+  <!-- Content Area -->
+  <div class="content-area">
+    <div class="content-topbar">
+      <div class="page-title" id="pageTitle" data-i18n="tab_wallet">Wallet</div>
+      <div class="mining-badge" id="miningBadge" data-i18n="mining_idle">IDLE</div>
+    </div>
+    <div class="content-body" id="contentBody">
+
+      <!-- ===== WALLET PANEL ===== -->
+      <div class="panel active" id="panel-wallet">
+        <!-- Connection Card -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">&#x26A1;</span>
+            <span class="card-title" data-i18n="connection">Connection</span>
+          </div>
+          <div class="card-sep"></div>
+          <label class="form-label" data-i18n="rpc_url">RPC Endpoint</label>
+          <input class="form-input" id="rpcInput" value="https://bsc-dataseed1.binance.org" style="margin-bottom:12px">
+          <label class="form-label" data-i18n="private_key">Private Key</label>
+          <div class="input-row" style="margin-bottom:16px">
+            <input class="form-input" id="pkInput" type="password" placeholder="0x...">
+            <button class="btn btn-ghost" onclick="togglePk()" id="btnShowPk" data-i18n="show">Show</button>
+          </div>
+          <button class="btn btn-accent btn-full" onclick="connectWallet()" id="btnConnect" data-i18n="connect">Connect Wallet</button>
+        </div>
+
+        <!-- Balance Card -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">&#x20BF;</span>
+            <span class="card-title" data-i18n="wallet_overview">Wallet Overview</span>
+            <button class="btn btn-ghost card-action" onclick="refreshData()" data-i18n="refresh">Refresh</button>
+          </div>
+          <div class="card-sep"></div>
+          <div class="balance-hero">
+            <span class="btc-icon">&#x20BF;</span>
+            <div class="bal-col">
+              <div class="bal-big" id="bigBalance">0.00000000 SAT</div>
+              <div class="bal-addr" id="addrDisplay">--</div>
+            </div>
+          </div>
+          <div class="card-sep"></div>
+          <div class="stats-grid">
+            <div class="stat-cell"><div class="stat-label" data-i18n="bnb_balance">BNB BALANCE</div><div class="stat-value" id="vBnb">--</div></div>
+            <div class="stat-cell"><div class="stat-label" data-i18n="sat_balance">SAT BALANCE</div><div class="stat-value accent" id="vSat">--</div></div>
+            <div class="stat-cell"><div class="stat-label" data-i18n="total_mined">TOTAL MINED</div><div class="stat-value" id="vMinted">--</div></div>
+            <div class="stat-cell"><div class="stat-label" data-i18n="mining_reward">BLOCK REWARD</div><div class="stat-value accent" id="vReward">--</div></div>
+            <div class="stat-cell"><div class="stat-label" data-i18n="difficulty">DIFFICULTY</div><div class="stat-value" id="vDiff">--</div></div>
+            <div class="stat-cell"><div class="stat-label" data-i18n="epoch">EPOCH</div><div class="stat-value" id="vEpoch">--</div></div>
+            <div class="stat-cell"><div class="stat-label" data-i18n="era">REWARD ERA</div><div class="stat-value green" id="vEra">--</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== MINE PANEL ===== -->
+      <div class="panel" id="panel-mine">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">&#x26CF;</span>
+            <span class="card-title" data-i18n="mining_dashboard">Mining Dashboard</span>
+          </div>
+          <div class="card-sep"></div>
+          <button class="btn btn-accent btn-mine-main" id="btnMine" onclick="toggleMining()" disabled data-i18n="start_mining">START MINING</button>
+          <div class="mine-stats-row">
+            <div class="mine-stat"><div class="ms-val green" id="sRate">0 H/s</div><div class="ms-label" data-i18n="hashrate">HASHRATE</div></div>
+            <div class="mine-stat"><div class="ms-val accent" id="sBlocks">0</div><div class="ms-label" data-i18n="blocks_found">BLOCKS FOUND</div></div>
+            <div class="mine-stat"><div class="ms-val blue" id="sHashes">0</div><div class="ms-label" data-i18n="total_hashes">TOTAL HASHES</div></div>
+          </div>
+          <div class="hash-viz" id="hashViz" data-i18n="hash_wait">Waiting to start mining...</div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">&#x2630;</span>
+            <span class="card-title" data-i18n="mining_log">Mining Log</span>
+            <button class="btn btn-ghost card-action" onclick="clearLog()" data-i18n="clear_log">Clear</button>
+          </div>
+          <div class="card-sep"></div>
+          <div class="log-body" id="logBody"></div>
+        </div>
+      </div>
+
+      <!-- ===== HISTORY PANEL ===== -->
+      <div class="panel" id="panel-history">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">&#x2630;</span>
+            <span class="card-title" data-i18n="history_title">Mining History</span>
+          </div>
+          <div class="card-sep"></div>
+          <div id="historyContent">
+            <div class="no-records" data-i18n="no_records">No records yet. Start mining to see results here.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SETTINGS PANEL ===== -->
+      <div class="panel" id="panel-settings">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">&#x2699;</span>
+            <span class="card-title" data-i18n="gas_settings">Gas Settings</span>
+          </div>
+          <div class="card-sep"></div>
+          <label class="form-label" data-i18n="gas_price">Gas Price (Gwei)</label>
+          <input class="form-input" id="gasPriceInput" value="3" style="margin-bottom:12px">
+          <label class="form-label" data-i18n="gas_limit">Gas Limit</label>
+          <input class="form-input" id="gasLimitInput" value="200000" style="margin-bottom:16px">
+          <label class="form-label" data-i18n="contract">Contract Address</label>
+          <div style="color:var(--accent);font-size:.85rem;margin-bottom:16px;word-break:break-all">0x14Dc4b4929c664534f1d4D64107d8F36CbF906a0</div>
+          <button class="btn btn-accent btn-full" onclick="saveSettings()" data-i18n="save_settings">Save Settings</button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">&#x20BF;</span>
+            <span class="card-title" data-i18n="contract_info">Contract Info</span>
+          </div>
+          <div class="card-sep"></div>
+          <div class="info-row"><span class="info-key" data-i18n="network">Network</span><span class="info-val">BSC Mainnet</span></div>
+          <div class="info-row"><span class="info-key" data-i18n="max_supply">Max Supply</span><span class="info-val">21,000,000 SAT</span></div>
+          <div class="info-row"><span class="info-key" data-i18n="halving">Halving</span><span class="info-val" data-i18n="every_era">Every Era</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">&#x2139;</span>
+            <span class="card-title" data-i18n="about">About</span>
+          </div>
+          <div class="card-sep"></div>
+          <div class="about-text" id="aboutText" data-i18n="about_text">Satoshi (SAT) is a Proof-of-Work mineable ERC20 token on BSC.
+Total Supply: 21,000,000 SAT (8 decimals)
+Initial Reward: 50 SAT per block, halving every era
+Difficulty adjusts every 1024 epochs
+Mining: keccak256(challenge, address, nonce) &lt;= target</div>
+        </div>
+      </div>
+
     </div>
   </div>
+</div>
 
-  <div class="mine-section">
-    <div class="stats-bar" id="statsBar" style="display:none">
-      <div class="stat"><div class="s-val" id="sHash">0</div><div class="s-label">哈希计数</div></div>
-      <div class="stat"><div class="s-val" id="sRate">0</div><div class="s-label">H/s</div></div>
-      <div class="stat"><div class="s-val" id="sTime">0s</div><div class="s-label">耗时</div></div>
+<!-- Mobile Bottom Nav -->
+<div class="mobile-nav">
+  <div class="mobile-nav-inner">
+    <div class="mobile-nav-item active" data-tab="wallet" onclick="showPanel('wallet')">
+      <span class="m-icon">&#x229A;</span><span data-i18n="tab_wallet">Wallet</span>
     </div>
-    <div class="hash-viz" id="hashViz">等待开始挖矿...</div>
-    <button class="btn-mine" id="btnMine" disabled onclick="toggleMining()">开始挖矿</button>
-  </div>
-
-  <div class="log-panel">
-    <div class="log-header">
-      <span>运行日志</span>
-      <button class="log-clear" onclick="clearLog()">清除</button>
+    <div class="mobile-nav-item" data-tab="mine" onclick="showPanel('mine')">
+      <span class="m-icon">&#x26CF;</span><span data-i18n="tab_mine">Mine</span>
     </div>
-    <div class="log-body" id="logBody"></div>
+    <div class="mobile-nav-item" data-tab="history" onclick="showPanel('history')">
+      <span class="m-icon">&#x2630;</span><span data-i18n="tab_history">History</span>
+    </div>
+    <div class="mobile-nav-item" data-tab="settings" onclick="showPanel('settings')">
+      <span class="m-icon">&#x2699;</span><span data-i18n="tab_settings">Settings</span>
+    </div>
   </div>
 </div>
 <script>
+<script>
+// ─── i18n ───
+const LANG = {
+  en: {
+    subtitle:'BSC PoW Mining Client',tab_wallet:'Wallet',tab_mine:'Mine',tab_history:'History',tab_settings:'Settings',
+    connection:'Connection',rpc_url:'RPC Endpoint',private_key:'Private Key',show:'Show',hide:'Hide',
+    connect:'Connect Wallet',disconnect:'Disconnect',wallet_overview:'Wallet Overview',
+    address:'Address',bnb_balance:'BNB Balance',sat_balance:'SAT Balance',total_mined:'Total Mined',
+    mining_reward:'Block Reward',difficulty:'Difficulty',epoch:'Epoch',era:'Reward Era',refresh:'Refresh',
+    mining_dashboard:'Mining Dashboard',start_mining:'START MINING',stop_mining:'STOP MINING',
+    hashrate:'Hashrate',blocks_found:'Blocks Found',total_hashes:'Total Hashes',
+    mining_log:'Mining Log',clear_log:'Clear',gas_settings:'Gas Settings',
+    gas_price:'Gas Price (Gwei)',gas_limit:'Gas Limit',contract:'Contract Address',
+    save_settings:'Save Settings',contract_info:'Contract Info',network:'Network',
+    max_supply:'Max Supply',halving:'Halving',every_era:'Every Era',about:'About',
+    about_text:"Satoshi (SAT) is a Proof-of-Work mineable ERC20 token on BSC.\nTotal Supply: 21,000,000 SAT (8 decimals)\nInitial Reward: 50 SAT per block, halving every era\nDifficulty adjusts every 1024 epochs\nMining: keccak256(challenge, address, nonce) <= target",
+    not_connected:'Disconnected',connected:'Connected',mining_active:'MINING ACTIVE',mining_idle:'IDLE',
+    history_title:'Mining History',no_records:'No records yet. Start mining to see results here.',
+    hash_wait:'Waiting to start mining...',hash_stopped:'Mining stopped',
+    time:'Time',nonce:'Nonce',reward:'Reward',tx_hash:'TX Hash',status:'Status',
+    settings_saved:'Settings saved',connect_first:'Please connect wallet first',
+    log_ready:'Satoshi (SAT) PoW Mining Terminal ready',log_contract:'Contract: ',log_connect_prompt:'Please connect your wallet to start mining',
+    log_connected:'Wallet connected: ',log_connect_fail:'Connection failed: ',
+    log_no_metamask:'MetaMask not detected. Please enter RPC & private key, or install MetaMask.',
+    log_challenge:'Challenge: ',log_challenge_fail:'Failed to get challenge: ',
+    log_found:'Solution found! Nonce: ',log_digest:'Digest: ',log_submitting:'Submitting mint transaction...',
+    log_tx_sent:'TX sent: ',log_tx_confirmed:'TX confirmed! Block: ',log_tx_gas:', Gas: ',
+    log_mint_fail:'Mint TX failed: ',log_mining_start:'Mining started...',log_mining_stop:'Mining stopped',
+    log_refresh_fail:'Failed to read on-chain data: ',log_challenge_updated:'Challenge updated (someone mined first), re-fetching...',
+    log_reward_received:'Reward received, continue mining',
+    btn_metamask:'Connect MetaMask',btn_pk:'Connect with Key',
+    success:'Success',failed:'Failed',error:'Error'
+  },
+  zh: {
+    subtitle:'BSC PoW 挖矿客户端',tab_wallet:'钱包',tab_mine:'挖矿',tab_history:'记录',tab_settings:'设置',
+    connection:'连接设置',rpc_url:'RPC 节点',private_key:'私钥',show:'显示',hide:'隐藏',
+    connect:'连接钱包',disconnect:'断开连接',wallet_overview:'钱包总览',
+    address:'地址',bnb_balance:'BNB 余额',sat_balance:'SAT 余额',total_mined:'已挖总量',
+    mining_reward:'区块奖励',difficulty:'难度',epoch:'纪元',era:'奖励时代',refresh:'刷新',
+    mining_dashboard:'挖矿面板',start_mining:'开始挖矿',stop_mining:'停止挖矿',
+    hashrate:'算力',blocks_found:'已出块',total_hashes:'总哈希数',
+    mining_log:'挖矿日志',clear_log:'清除',gas_settings:'Gas 设置',
+    gas_price:'Gas 价格 (Gwei)',gas_limit:'Gas 上限',contract:'合约地址',
+    save_settings:'保存设置',contract_info:'合约信息',network:'网络',
+    max_supply:'最大供应量',halving:'减半',every_era:'每个时代',about:'关于',
+    about_text:"Satoshi (SAT) 是一个基于 BSC 的工作量证明 ERC20 代币。\n总供应量：21,000,000 SAT（8位小数）\n初始奖励：每区块 50 SAT，每个时代减半\n难度每 1024 个纪元调整一次\n挖矿原理：keccak256(challenge, address, nonce) <= target",
+    not_connected:'未连接',connected:'已连接',mining_active:'挖矿中',mining_idle:'空闲',
+    history_title:'挖矿记录',no_records:'暂无记录。开始挖矿后将在此显示结果。',
+    hash_wait:'等待开始挖矿...',hash_stopped:'挖矿已停止',
+    time:'时间',nonce:'Nonce',reward:'奖励',tx_hash:'交易哈希',status:'状态',
+    settings_saved:'设置已保存',connect_first:'请先连接钱包',
+    log_ready:'Satoshi (SAT) PoW 挖矿终端已就绪',log_contract:'合约地址: ',log_connect_prompt:'请连接钱包开始挖矿',
+    log_connected:'钱包已连接: ',log_connect_fail:'连接失败: ',
+    log_no_metamask:'未检测到 MetaMask，请输入 RPC 和私钥连接，或安装 MetaMask。',
+    log_challenge:'挑战号: ',log_challenge_fail:'获取挑战参数失败: ',
+    log_found:'找到有效解! Nonce: ',log_digest:'Digest: ',log_submitting:'正在提交 mint 交易...',
+    log_tx_sent:'交易已发送: ',log_tx_confirmed:'交易已确认! 区块: ',log_tx_gas:', Gas: ',
+    log_mint_fail:'Mint 交易失败: ',log_mining_start:'挖矿已开始...',log_mining_stop:'挖矿已停止',
+    log_refresh_fail:'读取链上数据失败: ',log_challenge_updated:'挑战号已更新（可能被他人先挖到），重新获取参数...',
+    log_reward_received:'奖励已到账，可继续挖矿',
+    btn_metamask:'MetaMask 连接',btn_pk:'私钥连接',
+    success:'成功',failed:'失败',error:'错误'
+  }
+};
+let curLang = 'en';
+
+function t(key) { return LANG[curLang][key] || key; }
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    if (el.tagName === 'INPUT') el.placeholder = val;
+    else el.textContent = val;
+  });
+  // Update mining button text
+  const btn = document.getElementById('btnMine');
+  if (mining) {
+    btn.textContent = t('stop_mining');
+    document.getElementById('miningBadge').textContent = t('mining_active');
+    document.getElementById('miningBadge').classList.add('active');
+  } else {
+    btn.textContent = t('start_mining');
+    document.getElementById('miningBadge').textContent = t('mining_idle');
+    document.getElementById('miningBadge').classList.remove('active');
+  }
+  // Status text
+  const st = document.getElementById('statusText');
+  if (st) st.textContent = provider ? t('connected') : t('not_connected');
+  // Hash viz
+  if (!mining) document.getElementById('hashViz').textContent = t('hash_wait');
+}
+
+function toggleLang() {
+  curLang = curLang === 'en' ? 'zh' : 'en';
+  const btnText = curLang === 'zh' ? 'EN' : '中文';
+  document.getElementById('langBtn').textContent = btnText;
+  document.getElementById('mLangBtn').textContent = btnText;
+  applyLang();
+}
+
+// ─── Panel switching ───
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  // Sidebar nav
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.classList.toggle('active', n.getAttribute('data-tab') === name);
+  });
+  // Mobile nav
+  document.querySelectorAll('.mobile-nav-item').forEach(n => {
+    n.classList.toggle('active', n.getAttribute('data-tab') === name);
+  });
+  // Page title
+  document.getElementById('pageTitle').textContent = t('tab_' + name);
+}
+
+// ─── Contract ───
 const CA = "0x14Dc4b4929c664534f1d4D64107d8F36CbF906a0";
 const BSC_ID = "0x38";
 const ABI = [
@@ -154,27 +486,64 @@ const ABI = [
   "function getMiningReward() view returns (uint256)",
   "function epochCount() view returns (uint256)",
   "function tokensMinted() view returns (uint256)",
+  "function rewardEra() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
   "function mint(uint256 nonce, bytes32 challengeDigest) returns (bool)"
 ];
 
 let provider, signer, contract, userAddr;
-let mining = false, hashCount = 0, mineStart = 0, statsTimer = null;
+let mining = false, hashCount = 0, mineStart = 0, statsTimer = null, blocksFound = 0;
+let miningHistory = [];
+let pkMode = false; // true = private key mode (no MetaMask)
 
-// --- Logging ---
-function log(msg, type = "info") {
-  const el = document.getElementById("logBody");
-  const t = new Date().toLocaleTimeString("zh-CN", {hour12:false});
-  el.innerHTML += `<div class="log-line ${type}"><span class="time">[${t}]</span> <span class="msg">${msg}</span></div>`;
+// ─── Logging ───
+function log(msg, type = 'info') {
+  const el = document.getElementById('logBody');
+  const ts = new Date().toLocaleTimeString('zh-CN', {hour12: false});
+  el.innerHTML += `<div class="log-line ${type}"><span class="time">[${ts}]</span> <span class="msg">${msg}</span></div>`;
   el.scrollTop = el.scrollHeight;
 }
-function clearLog() { document.getElementById("logBody").innerHTML = ""; }
+function clearLog() { document.getElementById('logBody').innerHTML = ''; }
 
-// --- Wallet ---
+// ─── Toggle PK visibility ───
+function togglePk() {
+  const inp = document.getElementById('pkInput');
+  const btn = document.getElementById('btnShowPk');
+  if (inp.type === 'password') {
+    inp.type = 'text'; btn.textContent = t('hide');
+  } else {
+    inp.type = 'password'; btn.textContent = t('show');
+  }
+}
+
+// ─── Connect Wallet ───
 async function connectWallet() {
-  if (!window.ethereum) { log("未检测到 MetaMask，请安装后重试", "error"); return; }
+  const rpc = document.getElementById('rpcInput').value.trim();
+  const pk = document.getElementById('pkInput').value.trim();
+
+  // Private key mode
+  if (pk) {
+    try {
+      const rpcProvider = new ethers.JsonRpcProvider(rpc || "https://bsc-dataseed1.binance.org");
+      const wallet = new ethers.Wallet(pk, rpcProvider);
+      provider = rpcProvider;
+      signer = wallet;
+      userAddr = wallet.address;
+      contract = new ethers.Contract(CA, ABI, signer);
+      pkMode = true;
+      onConnected();
+    } catch (e) {
+      log(t('log_connect_fail') + e.message, 'error');
+    }
+    return;
+  }
+
+  // MetaMask mode
+  if (!window.ethereum) {
+    log(t('log_no_metamask'), 'error');
+    return;
+  }
   try {
-    // Switch to BSC
     try {
       await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: BSC_ID }] });
     } catch (e) {
@@ -191,71 +560,100 @@ async function connectWallet() {
     signer = await provider.getSigner();
     userAddr = await signer.getAddress();
     contract = new ethers.Contract(CA, ABI, signer);
-
-    document.getElementById("addrDisplay").textContent = userAddr.slice(0,6) + "..." + userAddr.slice(-4);
-    document.getElementById("walletInfo").style.display = "block";
-    document.getElementById("btnConnect").textContent = "已连接";
-    document.getElementById("btnConnect").classList.add("connected");
-    document.getElementById("btnMine").disabled = false;
-
-    log(`钱包已连接: ${userAddr.slice(0,8)}...`, "success");
-    await refreshData();
-  } catch (e) { log("连接失败: " + e.message, "error"); }
+    pkMode = false;
+    onConnected();
+  } catch (e) {
+    log(t('log_connect_fail') + e.message, 'error');
+  }
 }
 
+function onConnected() {
+  document.getElementById('addrDisplay').textContent = userAddr;
+  document.getElementById('statusDot').classList.add('connected');
+  document.getElementById('mStatusDot').classList.add('connected');
+  document.getElementById('statusText').textContent = t('connected');
+  document.getElementById('btnConnect').textContent = t('connected');
+  document.getElementById('btnMine').disabled = false;
+  log(t('log_connected') + userAddr.slice(0, 8) + '...', 'success');
+  refreshData();
+}
+
+// ─── Refresh on-chain data ───
 async function refreshData() {
+  if (!contract || !userAddr) return;
   try {
-    const [epoch, diff, target, reward, minted, bal] = await Promise.all([
+    const [epoch, diff, target, reward, minted, era] = await Promise.all([
       contract.epochCount(), contract.getMiningDifficulty(), contract.miningTarget(),
-      contract.getMiningReward(), contract.tokensMinted(), contract.balanceOf(userAddr)
+      contract.getMiningReward(), contract.tokensMinted(), contract.rewardEra()
     ]);
-    document.getElementById("vEpoch").textContent = epoch.toString();
-    document.getElementById("vDiff").textContent = Number(diff).toLocaleString();
-    const tHex = target.toString(16);
-    document.getElementById("vTarget").textContent = "0x" + tHex.slice(0,8) + "..." + tHex.slice(-4);
-    document.getElementById("vReward").textContent = ethers.formatUnits(reward, 8) + " SAT";
-    document.getElementById("vMinted").textContent = Number(ethers.formatUnits(minted, 8)).toLocaleString();
-    document.getElementById("balDisplay").textContent = ethers.formatUnits(bal, 8) + " SAT";
-  } catch (e) { log("读取链上数据失败: " + e.message, "error"); }
+
+    // Get balances
+    let bnbBal;
+    if (pkMode) {
+      bnbBal = await provider.getBalance(userAddr);
+    } else {
+      bnbBal = await provider.getBalance(userAddr);
+    }
+    const satBal = await contract.balanceOf(userAddr);
+
+    document.getElementById('vEpoch').textContent = epoch.toString();
+    document.getElementById('vDiff').textContent = Number(diff).toLocaleString();
+    const rewardFmt = ethers.formatUnits(reward, 8);
+    document.getElementById('vReward').textContent = rewardFmt + ' SAT';
+    document.getElementById('vMinted').textContent = Number(ethers.formatUnits(minted, 8)).toLocaleString() + ' / 21M';
+    document.getElementById('vEra').textContent = era.toString();
+    document.getElementById('vBnb').textContent = Number(ethers.formatEther(bnbBal)).toFixed(6);
+    const satFmt = ethers.formatUnits(satBal, 8);
+    document.getElementById('vSat').textContent = satFmt;
+    document.getElementById('bigBalance').textContent = satFmt + ' SAT';
+  } catch (e) {
+    log(t('log_refresh_fail') + e.message, 'error');
+  }
 }
 
-// --- Mining ---
+// ─── Mining ───
 function toggleMining() {
-  if (mining) { stopMining(); } else { startMining(); }
+  if (mining) stopMining(); else startMining();
 }
 
 function stopMining() {
   mining = false;
   clearInterval(statsTimer);
-  document.getElementById("btnMine").textContent = "开始挖矿";
-  document.getElementById("btnMine").classList.remove("mining");
-  document.getElementById("hashViz").classList.remove("active");
-  document.getElementById("hashViz").textContent = "挖矿已停止";
-  log("挖矿已停止", "warn");
+  const btn = document.getElementById('btnMine');
+  btn.textContent = t('start_mining');
+  btn.classList.remove('mining');
+  document.getElementById('hashViz').textContent = t('hash_stopped');
+  document.getElementById('hashViz').classList.remove('active');
+  document.getElementById('miningBadge').textContent = t('mining_idle');
+  document.getElementById('miningBadge').classList.remove('active');
+  log(t('log_mining_stop'), 'warn');
 }
 
 async function startMining() {
+  if (!contract || !userAddr) {
+    log(t('connect_first'), 'error');
+    return;
+  }
   mining = true;
   hashCount = 0;
   mineStart = Date.now();
-  document.getElementById("btnMine").textContent = "停止挖矿";
-  document.getElementById("btnMine").classList.add("mining");
-  document.getElementById("statsBar").style.display = "flex";
-  document.getElementById("hashViz").classList.add("active");
-  log("开始挖矿...", "success");
+  const btn = document.getElementById('btnMine');
+  btn.textContent = t('stop_mining');
+  btn.classList.add('mining');
+  document.getElementById('hashViz').classList.add('active');
+  document.getElementById('miningBadge').textContent = t('mining_active');
+  document.getElementById('miningBadge').classList.add('active');
+  log(t('log_mining_start'), 'success');
 
   statsTimer = setInterval(updateStats, 500);
-
   await mineLoop();
 }
 
 function updateStats() {
   const elapsed = (Date.now() - mineStart) / 1000;
   const rate = elapsed > 0 ? Math.floor(hashCount / elapsed) : 0;
-  document.getElementById("sHash").textContent = hashCount.toLocaleString();
-  document.getElementById("sRate").textContent = rate.toLocaleString();
-  const m = Math.floor(elapsed / 60), s = Math.floor(elapsed % 60);
-  document.getElementById("sTime").textContent = m > 0 ? `${m}m${s}s` : `${s}s`;
+  document.getElementById('sHashes').textContent = hashCount.toLocaleString();
+  document.getElementById('sRate').textContent = rate.toLocaleString() + ' H/s';
 }
 
 async function mineLoop() {
@@ -264,10 +662,13 @@ async function mineLoop() {
     [challengeNumber, miningTarget] = await Promise.all([
       contract.challengeNumber(), contract.miningTarget()
     ]);
-    log(`挑战号: ${challengeNumber.slice(0,18)}...`);
-  } catch (e) { log("获取挑战参数失败: " + e.message, "error"); stopMining(); return; }
+    log(t('log_challenge') + challengeNumber.slice(0, 18) + '...');
+  } catch (e) {
+    log(t('log_challenge_fail') + e.message, 'error');
+    stopMining();
+    return;
+  }
 
-  // random start nonce
   const rnd = ethers.randomBytes(8);
   let nonce = BigInt("0x" + ethers.hexlify(rnd).slice(2));
   const CHUNK = 3000;
@@ -284,76 +685,149 @@ async function mineLoop() {
       hashCount++;
 
       if (BigInt(digest) <= miningTarget) {
-        // Found!
-        document.getElementById("hashViz").innerHTML = `<span class="found">解已找到! ${digest.slice(0,24)}...</span>`;
-        log(`找到有效解! Nonce: ${nonce}`, "success");
-        log(`Digest: ${digest.slice(0,32)}...`, "success");
+        document.getElementById('hashViz').innerHTML = `<span class="found">${t('log_found')}${digest.slice(0, 24)}...</span>`;
+        log(t('log_found') + nonce, 'success');
+        log(t('log_digest') + digest.slice(0, 32) + '...', 'success');
         submitSolution(nonce, digest);
         return;
       }
       nonce++;
     }
 
-    // show latest hash
     const lastPacked = ethers.solidityPacked(["bytes32","address","uint256"],[challengeNumber,userAddr,nonce]);
     const lastDigest = ethers.keccak256(lastPacked);
-    document.getElementById("hashViz").textContent = lastDigest;
+    document.getElementById('hashViz').textContent = lastDigest;
 
     checkCounter += CHUNK;
-    // re-check challenge every ~60k hashes
     if (checkCounter >= 60000) {
       checkCounter = 0;
       contract.challengeNumber().then(newCh => {
         if (newCh !== challengeNumber) {
-          log("挑战号已更新（可能被他人先挖到），重新获取参数...", "warn");
+          log(t('log_challenge_updated'), 'warn');
           refreshData();
-          mineLoop(); // restart with new challenge
+          mineLoop();
         } else {
           setTimeout(chunk, 0);
         }
       }).catch(() => setTimeout(chunk, 0));
       return;
     }
-
     setTimeout(chunk, 0);
   }
-
   chunk();
 }
 
 async function submitSolution(nonce, digest) {
   mining = false;
   clearInterval(statsTimer);
-  document.getElementById("btnMine").textContent = "提交中...";
-  log("正在提交 mint 交易...", "warn");
+  document.getElementById('btnMine').textContent = t('log_submitting');
+  log(t('log_submitting'), 'warn');
 
   try {
-    const tx = await contract.mint(nonce, digest, { gasLimit: 200000 });
-    log(`交易已发送: ${tx.hash}`, "info");
-    log("等待链上确认...", "info");
+    let tx;
+    if (pkMode) {
+      // Build and sign manually for private key mode
+      const gasPrice = ethers.parseUnits(document.getElementById('gasPriceInput').value || '3', 'gwei');
+      const gasLimit = parseInt(document.getElementById('gasLimitInput').value) || 200000;
+      tx = await contract.mint(nonce, digest, { gasPrice, gasLimit });
+    } else {
+      tx = await contract.mint(nonce, digest, { gasLimit: 200000 });
+    }
+    log(t('log_tx_sent') + tx.hash, 'info');
     const receipt = await tx.wait();
-    log(`交易已确认! 区块: ${receipt.blockNumber}, Gas: ${receipt.gasUsed}`, "success");
+    log(t('log_tx_confirmed') + receipt.blockNumber + t('log_tx_gas') + receipt.gasUsed, 'success');
+
+    blocksFound++;
+    document.getElementById('sBlocks').textContent = blocksFound;
+
+    // Add to history
+    addHistoryEntry({
+      time: new Date().toLocaleString(),
+      nonce: nonce.toString(),
+      reward: document.getElementById('vReward').textContent || '-- SAT',
+      tx_hash: tx.hash,
+      status: 'Success'
+    });
+
     await refreshData();
-    log("奖励已到账，可继续挖矿", "success");
+    log(t('log_reward_received'), 'success');
   } catch (e) {
-    log("Mint 交易失败: " + (e.reason || e.message), "error");
+    log(t('log_mint_fail') + (e.reason || e.message), 'error');
+    addHistoryEntry({
+      time: new Date().toLocaleString(),
+      nonce: nonce.toString(),
+      reward: '0',
+      tx_hash: 'N/A',
+      status: 'Failed'
+    });
   }
 
-  document.getElementById("btnMine").textContent = "开始挖矿";
-  document.getElementById("btnMine").classList.remove("mining");
-  document.getElementById("btnMine").disabled = false;
-  document.getElementById("hashViz").classList.remove("active");
+  const btn = document.getElementById('btnMine');
+  btn.textContent = t('start_mining');
+  btn.classList.remove('mining');
+  btn.disabled = false;
+  document.getElementById('hashViz').classList.remove('active');
+  document.getElementById('miningBadge').textContent = t('mining_idle');
+  document.getElementById('miningBadge').classList.remove('active');
 }
 
-// Listen for account/chain changes
+// ─── History ───
+function addHistoryEntry(entry) {
+  miningHistory.unshift(entry);
+  renderHistory();
+}
+
+function renderHistory() {
+  const container = document.getElementById('historyContent');
+  if (miningHistory.length === 0) {
+    container.innerHTML = `<div class="no-records" data-i18n="no_records">${t('no_records')}</div>`;
+    return;
+  }
+  let html = `<table class="history-table"><thead><tr>
+    <th data-i18n="time">${t('time')}</th>
+    <th data-i18n="nonce">${t('nonce')}</th>
+    <th data-i18n="reward">${t('reward')}</th>
+    <th data-i18n="tx_hash">${t('tx_hash')}</th>
+    <th data-i18n="status">${t('status')}</th>
+  </tr></thead><tbody>`;
+  for (const e of miningHistory) {
+    const statusClass = e.status === 'Success' ? 'status-ok' : (e.status === 'Skipped' ? 'status-skip' : 'status-fail');
+    const txDisplay = e.tx_hash && e.tx_hash.length > 20
+      ? `<a class="tx-link" href="https://bscscan.com/tx/${e.tx_hash}" target="_blank" rel="noopener">${e.tx_hash.slice(0,10)}...${e.tx_hash.slice(-6)}</a>`
+      : (e.tx_hash || 'N/A');
+    const nonceDisplay = e.nonce && e.nonce.length > 14 ? e.nonce.slice(0,14) + '...' : e.nonce;
+    html += `<tr>
+      <td>${e.time}</td>
+      <td>${nonceDisplay}</td>
+      <td style="color:var(--accent)">${e.reward}</td>
+      <td>${txDisplay}</td>
+      <td class="${statusClass}">${e.status}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// ─── Settings ───
+function saveSettings() {
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--accent);color:var(--accent);padding:10px 24px;border-radius:4px;font-size:.85rem;font-weight:600;z-index:9999;font-family:var(--font-mono)';
+  toast.textContent = t('settings_saved');
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2500);
+}
+
+// ─── Listen for account/chain changes ───
 if (window.ethereum) {
-  window.ethereum.on("accountsChanged", () => location.reload());
-  window.ethereum.on("chainChanged", () => location.reload());
+  window.ethereum.on('accountsChanged', () => location.reload());
+  window.ethereum.on('chainChanged', () => location.reload());
 }
 
-log("Satoshi (SAT) PoW 挖矿终端已就绪", "info");
-log("合约地址: " + CA, "info");
-log("请连接 MetaMask 钱包开始挖矿", "info");
+// ─── Init ───
+log(t('log_ready'), 'info');
+log(t('log_contract') + CA, 'info');
+log(t('log_connect_prompt'), 'info');
+</script>
 </script>
 </body>
 </html>
