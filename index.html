@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -72,7 +72,8 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
 .balance-hero{display:flex;align-items:center;gap:12px;padding:8px 0}
 .balance-hero .btc-icon{font-size:2rem;color:var(--accent)}
 .balance-hero .bal-big{font-size:1.6rem;font-weight:700;color:#fff}
-.balance-hero .bal-addr{font-size:.72rem;color:var(--text3);word-break:break-all}
+.balance-hero .bal-addr{font-size:.72rem;color:var(--text3);word-break:break-all;cursor:pointer;transition:color .2s}
+.balance-hero .bal-addr:hover{color:var(--accent)}
 .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
 .stat-cell{background:var(--bg-card2);padding:10px 14px;border-radius:4px}
 .stat-cell .stat-label{font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
@@ -127,6 +128,11 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
 .mobile-header .mh-logo .logo-icon{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:900;color:#000;font-family:var(--font-display)}
 .mobile-header .mh-title{font-size:.9rem;font-weight:700;color:#fff;font-family:var(--font-display)}
 .mobile-header .mh-right{display:flex;align-items:center;gap:8px}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-100px);background:var(--bg-card);border:1px solid var(--accent);color:var(--accent);padding:10px 24px;border-radius:4px;font-size:.85rem;font-weight:600;z-index:9999;font-family:var(--font-mono);transition:transform .3s ease;pointer-events:none}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.uptime-row{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;background:var(--bg);border-radius:4px;border:1px solid var(--border)}
+.uptime-row .uptime-label{font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px}
+.uptime-row .uptime-val{font-size:.85rem;color:var(--blue);font-weight:600;margin-left:auto}
 @media(max-width:768px){
   .sidebar{display:none}
   .mobile-nav{display:block}
@@ -150,6 +156,9 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
 </style>
 </head>
 <body>
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
 <!-- Mobile Header -->
 <div class="mobile-header" id="mobileHeader">
   <div class="mh-logo">
@@ -208,7 +217,6 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
 
       <!-- ===== WALLET PANEL ===== -->
       <div class="panel active" id="panel-wallet">
-        <!-- Connection Card -->
         <div class="card">
           <div class="card-header">
             <span class="card-icon">&#x26A1;</span>
@@ -224,8 +232,6 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
           </div>
           <button class="btn btn-accent btn-full" onclick="connectWallet()" id="btnConnect" data-i18n="connect">Connect Wallet</button>
         </div>
-
-        <!-- Balance Card -->
         <div class="card">
           <div class="card-header">
             <span class="card-icon">&#x20BF;</span>
@@ -237,7 +243,7 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
             <span class="btc-icon">&#x20BF;</span>
             <div class="bal-col">
               <div class="bal-big" id="bigBalance">0.00000000 SAT</div>
-              <div class="bal-addr" id="addrDisplay">--</div>
+              <div class="bal-addr" id="addrDisplay" onclick="copyAddress()" title="Click to copy">--</div>
             </div>
           </div>
           <div class="card-sep"></div>
@@ -267,9 +273,12 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
             <div class="mine-stat"><div class="ms-val accent" id="sBlocks">0</div><div class="ms-label" data-i18n="blocks_found">BLOCKS FOUND</div></div>
             <div class="mine-stat"><div class="ms-val blue" id="sHashes">0</div><div class="ms-label" data-i18n="total_hashes">TOTAL HASHES</div></div>
           </div>
+          <div class="uptime-row" id="uptimeRow" style="display:none">
+            <span class="uptime-label" data-i18n="uptime">UPTIME</span>
+            <span class="uptime-val" id="sUptime">00:00:00</span>
+          </div>
           <div class="hash-viz" id="hashViz" data-i18n="hash_wait">Waiting to start mining...</div>
         </div>
-
         <div class="card">
           <div class="card-header">
             <span class="card-icon">&#x2630;</span>
@@ -308,10 +317,9 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
           <label class="form-label" data-i18n="gas_limit">Gas Limit</label>
           <input class="form-input" id="gasLimitInput" value="200000" style="margin-bottom:16px">
           <label class="form-label" data-i18n="contract">Contract Address</label>
-          <div style="color:var(--accent);font-size:.85rem;margin-bottom:16px;word-break:break-all">0x14Dc4b4929c664534f1d4D64107d8F36CbF906a0</div>
+          <div style="color:var(--accent);font-size:.85rem;margin-bottom:16px;word-break:break-all;cursor:pointer" onclick="copyText('0x14Dc4b4929c664534f1d4D64107d8F36CbF906a0')">0x14Dc4b4929c664534f1d4D64107d8F36CbF906a0</div>
           <button class="btn btn-accent btn-full" onclick="saveSettings()" data-i18n="save_settings">Save Settings</button>
         </div>
-
         <div class="card">
           <div class="card-header">
             <span class="card-icon">&#x20BF;</span>
@@ -322,7 +330,6 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
           <div class="info-row"><span class="info-key" data-i18n="max_supply">Max Supply</span><span class="info-val">21,000,000 SAT</span></div>
           <div class="info-row"><span class="info-key" data-i18n="halving">Halving</span><span class="info-val" data-i18n="every_era">Every Era</span></div>
         </div>
-
         <div class="card">
           <div class="card-header">
             <span class="card-icon">&#x2139;</span>
@@ -358,7 +365,7 @@ Mining: keccak256(challenge, address, nonce) &lt;= target</div>
     </div>
   </div>
 </div>
-<script>
+
 <script>
 // ─── i18n ───
 const LANG = {
@@ -369,7 +376,7 @@ const LANG = {
     address:'Address',bnb_balance:'BNB Balance',sat_balance:'SAT Balance',total_mined:'Total Mined',
     mining_reward:'Block Reward',difficulty:'Difficulty',epoch:'Epoch',era:'Reward Era',refresh:'Refresh',
     mining_dashboard:'Mining Dashboard',start_mining:'START MINING',stop_mining:'STOP MINING',
-    hashrate:'Hashrate',blocks_found:'Blocks Found',total_hashes:'Total Hashes',
+    hashrate:'Hashrate',blocks_found:'Blocks Found',total_hashes:'Total Hashes',uptime:'Uptime',
     mining_log:'Mining Log',clear_log:'Clear',gas_settings:'Gas Settings',
     gas_price:'Gas Price (Gwei)',gas_limit:'Gas Limit',contract:'Contract Address',
     save_settings:'Save Settings',contract_info:'Contract Info',network:'Network',
@@ -380,17 +387,23 @@ const LANG = {
     hash_wait:'Waiting to start mining...',hash_stopped:'Mining stopped',
     time:'Time',nonce:'Nonce',reward:'Reward',tx_hash:'TX Hash',status:'Status',
     settings_saved:'Settings saved',connect_first:'Please connect wallet first',
-    log_ready:'Satoshi (SAT) PoW Mining Terminal ready',log_contract:'Contract: ',log_connect_prompt:'Please connect your wallet to start mining',
+    log_ready:'Satoshi (SAT) PoW Mining Terminal ready',log_contract:'Contract: ',
+    log_connect_prompt:'Please connect your wallet to start mining',
     log_connected:'Wallet connected: ',log_connect_fail:'Connection failed: ',
     log_no_metamask:'MetaMask not detected. Please enter RPC & private key, or install MetaMask.',
     log_challenge:'Challenge: ',log_challenge_fail:'Failed to get challenge: ',
     log_found:'Solution found! Nonce: ',log_digest:'Digest: ',log_submitting:'Submitting mint transaction...',
     log_tx_sent:'TX sent: ',log_tx_confirmed:'TX confirmed! Block: ',log_tx_gas:', Gas: ',
     log_mint_fail:'Mint TX failed: ',log_mining_start:'Mining started...',log_mining_stop:'Mining stopped',
-    log_refresh_fail:'Failed to read on-chain data: ',log_challenge_updated:'Challenge updated (someone mined first), re-fetching...',
+    log_refresh_fail:'Failed to read on-chain data: ',
+    log_challenge_updated:'Challenge updated (someone mined first), re-fetching...',
     log_reward_received:'Reward received, continue mining',
-    btn_metamask:'Connect MetaMask',btn_pk:'Connect with Key',
-    success:'Success',failed:'Failed',error:'Error'
+    log_pre_validate_pass:'Pre-validation passed, submitting TX...',
+    log_pre_validate_skip:'Skipped submission (pre-validation failed): ',
+    log_solution_already:'Challenge already solved by another miner',
+    success:'Success',failed:'Failed',error:'Error',skipped:'Skipped',
+    copied:'Copied!',copy:'Copy',
+    enter_rpc:'Please enter RPC URL',enter_pk:'Please enter private key'
   },
   zh: {
     subtitle:'BSC PoW 挖矿客户端',tab_wallet:'钱包',tab_mine:'挖矿',tab_history:'记录',tab_settings:'设置',
@@ -399,7 +412,7 @@ const LANG = {
     address:'地址',bnb_balance:'BNB 余额',sat_balance:'SAT 余额',total_mined:'已挖总量',
     mining_reward:'区块奖励',difficulty:'难度',epoch:'纪元',era:'奖励时代',refresh:'刷新',
     mining_dashboard:'挖矿面板',start_mining:'开始挖矿',stop_mining:'停止挖矿',
-    hashrate:'算力',blocks_found:'已出块',total_hashes:'总哈希数',
+    hashrate:'算力',blocks_found:'已出块',total_hashes:'总哈希数',uptime:'运行时间',
     mining_log:'挖矿日志',clear_log:'清除',gas_settings:'Gas 设置',
     gas_price:'Gas 价格 (Gwei)',gas_limit:'Gas 上限',contract:'合约地址',
     save_settings:'保存设置',contract_info:'合约信息',network:'网络',
@@ -410,17 +423,23 @@ const LANG = {
     hash_wait:'等待开始挖矿...',hash_stopped:'挖矿已停止',
     time:'时间',nonce:'Nonce',reward:'奖励',tx_hash:'交易哈希',status:'状态',
     settings_saved:'设置已保存',connect_first:'请先连接钱包',
-    log_ready:'Satoshi (SAT) PoW 挖矿终端已就绪',log_contract:'合约地址: ',log_connect_prompt:'请连接钱包开始挖矿',
+    log_ready:'Satoshi (SAT) PoW 挖矿终端已就绪',log_contract:'合约地址: ',
+    log_connect_prompt:'请连接钱包开始挖矿',
     log_connected:'钱包已连接: ',log_connect_fail:'连接失败: ',
     log_no_metamask:'未检测到 MetaMask，请输入 RPC 和私钥连接，或安装 MetaMask。',
     log_challenge:'挑战号: ',log_challenge_fail:'获取挑战参数失败: ',
     log_found:'找到有效解! Nonce: ',log_digest:'Digest: ',log_submitting:'正在提交 mint 交易...',
     log_tx_sent:'交易已发送: ',log_tx_confirmed:'交易已确认! 区块: ',log_tx_gas:', Gas: ',
     log_mint_fail:'Mint 交易失败: ',log_mining_start:'挖矿已开始...',log_mining_stop:'挖矿已停止',
-    log_refresh_fail:'读取链上数据失败: ',log_challenge_updated:'挑战号已更新（可能被他人先挖到），重新获取参数...',
+    log_refresh_fail:'读取链上数据失败: ',
+    log_challenge_updated:'挑战号已更新（可能被他人先挖到），重新获取参数...',
     log_reward_received:'奖励已到账，可继续挖矿',
-    btn_metamask:'MetaMask 连接',btn_pk:'私钥连接',
-    success:'成功',failed:'失败',error:'错误'
+    log_pre_validate_pass:'预判通过，提交交易中...',
+    log_pre_validate_skip:'跳过提交（预判失败）：',
+    log_solution_already:'该 Challenge 已被其他矿工解决',
+    success:'成功',failed:'失败',error:'错误',skipped:'已跳过',
+    copied:'已复制!',copy:'复制',
+    enter_rpc:'请输入 RPC 地址',enter_pk:'请输入私钥'
   }
 };
 let curLang = 'en';
@@ -434,7 +453,6 @@ function applyLang() {
     if (el.tagName === 'INPUT') el.placeholder = val;
     else el.textContent = val;
   });
-  // Update mining button text
   const btn = document.getElementById('btnMine');
   if (mining) {
     btn.textContent = t('stop_mining');
@@ -445,11 +463,10 @@ function applyLang() {
     document.getElementById('miningBadge').textContent = t('mining_idle');
     document.getElementById('miningBadge').classList.remove('active');
   }
-  // Status text
   const st = document.getElementById('statusText');
   if (st) st.textContent = provider ? t('connected') : t('not_connected');
-  // Hash viz
   if (!mining) document.getElementById('hashViz').textContent = t('hash_wait');
+  renderHistory();
 }
 
 function toggleLang() {
@@ -460,19 +477,33 @@ function toggleLang() {
   applyLang();
 }
 
+// ─── Toast ───
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ─── Copy helpers ───
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => showToast(t('copied'))).catch(() => {});
+}
+function copyAddress() {
+  if (userAddr) copyText(userAddr);
+}
+
 // ─── Panel switching ───
 function showPanel(name) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
-  // Sidebar nav
   document.querySelectorAll('.nav-item').forEach(n => {
     n.classList.toggle('active', n.getAttribute('data-tab') === name);
   });
-  // Mobile nav
   document.querySelectorAll('.mobile-nav-item').forEach(n => {
     n.classList.toggle('active', n.getAttribute('data-tab') === name);
   });
-  // Page title
   document.getElementById('pageTitle').textContent = t('tab_' + name);
 }
 
@@ -488,19 +519,44 @@ const ABI = [
   "function tokensMinted() view returns (uint256)",
   "function rewardEra() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
-  "function mint(uint256 nonce, bytes32 challengeDigest) returns (bool)"
+  "function mint(uint256 nonce, bytes32 challengeDigest) returns (bool)",
+  "function solutionForChallenge(bytes32) view returns (bytes32)",
+  "function lastRewardTo() view returns (address)",
+  "function lastRewardAmount() view returns (uint256)",
+  "function totalSupply() view returns (uint256)"
 ];
 
-let provider, signer, contract, userAddr;
-let mining = false, hashCount = 0, mineStart = 0, statsTimer = null, blocksFound = 0;
+let provider = null, signer = null, contract = null, userAddr = null;
+let mining = false, hashCount = 0, mineStart = 0, statsTimer = null, uptimeTimer = null, blocksFound = 0;
 let miningHistory = [];
-let pkMode = false; // true = private key mode (no MetaMask)
+let pkMode = false;
+
+// ─── Persist settings & history to localStorage ───
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('satoshi_settings'));
+    if (s) {
+      if (s.rpc) document.getElementById('rpcInput').value = s.rpc;
+      if (s.gasPrice) document.getElementById('gasPriceInput').value = s.gasPrice;
+      if (s.gasLimit) document.getElementById('gasLimitInput').value = s.gasLimit;
+    }
+  } catch(e) {}
+}
+function loadHistory() {
+  try {
+    const h = JSON.parse(localStorage.getItem('satoshi_history'));
+    if (Array.isArray(h)) miningHistory = h;
+  } catch(e) {}
+}
+function saveHistory() {
+  try { localStorage.setItem('satoshi_history', JSON.stringify(miningHistory.slice(-200))); } catch(e) {}
+}
 
 // ─── Logging ───
 function log(msg, type = 'info') {
   const el = document.getElementById('logBody');
   const ts = new Date().toLocaleTimeString('zh-CN', {hour12: false});
-  el.innerHTML += `<div class="log-line ${type}"><span class="time">[${ts}]</span> <span class="msg">${msg}</span></div>`;
+  el.innerHTML += '<div class="log-line ' + type + '"><span class="time">[' + ts + ']</span> <span class="msg">' + msg + '</span></div>';
   el.scrollTop = el.scrollHeight;
 }
 function clearLog() { document.getElementById('logBody').innerHTML = ''; }
@@ -509,11 +565,8 @@ function clearLog() { document.getElementById('logBody').innerHTML = ''; }
 function togglePk() {
   const inp = document.getElementById('pkInput');
   const btn = document.getElementById('btnShowPk');
-  if (inp.type === 'password') {
-    inp.type = 'text'; btn.textContent = t('hide');
-  } else {
-    inp.type = 'password'; btn.textContent = t('show');
-  }
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = t('hide'); }
+  else { inp.type = 'password'; btn.textContent = t('show'); }
 }
 
 // ─── Connect Wallet ───
@@ -521,7 +574,6 @@ async function connectWallet() {
   const rpc = document.getElementById('rpcInput').value.trim();
   const pk = document.getElementById('pkInput').value.trim();
 
-  // Private key mode
   if (pk) {
     try {
       const rpcProvider = new ethers.JsonRpcProvider(rpc || "https://bsc-dataseed1.binance.org");
@@ -538,7 +590,6 @@ async function connectWallet() {
     return;
   }
 
-  // MetaMask mode
   if (!window.ethereum) {
     log(t('log_no_metamask'), 'error');
     return;
@@ -575,6 +626,7 @@ function onConnected() {
   document.getElementById('btnConnect').textContent = t('connected');
   document.getElementById('btnMine').disabled = false;
   log(t('log_connected') + userAddr.slice(0, 8) + '...', 'success');
+  showToast(t('connected'));
   refreshData();
 }
 
@@ -586,14 +638,7 @@ async function refreshData() {
       contract.epochCount(), contract.getMiningDifficulty(), contract.miningTarget(),
       contract.getMiningReward(), contract.tokensMinted(), contract.rewardEra()
     ]);
-
-    // Get balances
-    let bnbBal;
-    if (pkMode) {
-      bnbBal = await provider.getBalance(userAddr);
-    } else {
-      bnbBal = await provider.getBalance(userAddr);
-    }
+    const bnbBal = await provider.getBalance(userAddr);
     const satBal = await contract.balanceOf(userAddr);
 
     document.getElementById('vEpoch').textContent = epoch.toString();
@@ -611,6 +656,15 @@ async function refreshData() {
   }
 }
 
+// ─── Uptime formatting ───
+function formatUptime(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = String(Math.floor(s / 3600)).padStart(2, '0');
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const sec = String(s % 60).padStart(2, '0');
+  return h + ':' + m + ':' + sec;
+}
+
 // ─── Mining ───
 function toggleMining() {
   if (mining) stopMining(); else startMining();
@@ -619,6 +673,7 @@ function toggleMining() {
 function stopMining() {
   mining = false;
   clearInterval(statsTimer);
+  clearInterval(uptimeTimer);
   const btn = document.getElementById('btnMine');
   btn.textContent = t('start_mining');
   btn.classList.remove('mining');
@@ -626,6 +681,7 @@ function stopMining() {
   document.getElementById('hashViz').classList.remove('active');
   document.getElementById('miningBadge').textContent = t('mining_idle');
   document.getElementById('miningBadge').classList.remove('active');
+  document.getElementById('uptimeRow').style.display = 'none';
   log(t('log_mining_stop'), 'warn');
 }
 
@@ -643,9 +699,13 @@ async function startMining() {
   document.getElementById('hashViz').classList.add('active');
   document.getElementById('miningBadge').textContent = t('mining_active');
   document.getElementById('miningBadge').classList.add('active');
+  document.getElementById('uptimeRow').style.display = 'flex';
   log(t('log_mining_start'), 'success');
 
   statsTimer = setInterval(updateStats, 500);
+  uptimeTimer = setInterval(() => {
+    document.getElementById('sUptime').textContent = formatUptime(Date.now() - mineStart);
+  }, 1000);
   await mineLoop();
 }
 
@@ -685,10 +745,10 @@ async function mineLoop() {
       hashCount++;
 
       if (BigInt(digest) <= miningTarget) {
-        document.getElementById('hashViz').innerHTML = `<span class="found">${t('log_found')}${digest.slice(0, 24)}...</span>`;
+        document.getElementById('hashViz').innerHTML = '<span class="found">' + t('log_found') + digest.slice(0, 24) + '...</span>';
         log(t('log_found') + nonce, 'success');
         log(t('log_digest') + digest.slice(0, 32) + '...', 'success');
-        submitSolution(nonce, digest);
+        submitSolution(nonce, digest, challengeNumber);
         return;
       }
       nonce++;
@@ -717,16 +777,55 @@ async function mineLoop() {
   chunk();
 }
 
-async function submitSolution(nonce, digest) {
+// ─── Pre-validation (like the Python version) ───
+async function preValidateSolution(nonce, digest, challenge) {
+  try {
+    const currentChallenge = await contract.challengeNumber();
+    if (currentChallenge !== challenge) {
+      return { valid: false, reason: t('log_solution_already') };
+    }
+    const currentTarget = await contract.miningTarget();
+    if (BigInt(digest) > currentTarget) {
+      return { valid: false, reason: 'Digest exceeds current target' };
+    }
+    // Simulate call
+    const readContract = new ethers.Contract(CA, ABI, provider);
+    await readContract.mint.staticCall(nonce, digest, { from: userAddr });
+    return { valid: true, reason: '' };
+  } catch (e) {
+    const msg = e.message || '';
+    if (msg.toLowerCase().includes('already solved')) return { valid: false, reason: t('log_solution_already') };
+    return { valid: false, reason: msg.slice(0, 120) };
+  }
+}
+
+async function submitSolution(nonce, digest, challenge) {
   mining = false;
   clearInterval(statsTimer);
+  clearInterval(uptimeTimer);
   document.getElementById('btnMine').textContent = t('log_submitting');
+
+  // Pre-validate
+  const check = await preValidateSolution(nonce, digest, challenge);
+  if (!check.valid) {
+    log(t('log_pre_validate_skip') + check.reason, 'warn');
+    addHistoryEntry({
+      time: new Date().toLocaleString(),
+      nonce: nonce.toString(),
+      reward: '0',
+      tx_hash: 'N/A',
+      status: 'Skipped'
+    });
+    resetMineButton();
+    return;
+  }
+
+  log(t('log_pre_validate_pass'), 'success');
   log(t('log_submitting'), 'warn');
 
   try {
     let tx;
     if (pkMode) {
-      // Build and sign manually for private key mode
       const gasPrice = ethers.parseUnits(document.getElementById('gasPriceInput').value || '3', 'gwei');
       const gasLimit = parseInt(document.getElementById('gasLimitInput').value) || 200000;
       tx = await contract.mint(nonce, digest, { gasPrice, gasLimit });
@@ -740,7 +839,6 @@ async function submitSolution(nonce, digest) {
     blocksFound++;
     document.getElementById('sBlocks').textContent = blocksFound;
 
-    // Add to history
     addHistoryEntry({
       time: new Date().toLocaleString(),
       nonce: nonce.toString(),
@@ -762,6 +860,10 @@ async function submitSolution(nonce, digest) {
     });
   }
 
+  resetMineButton();
+}
+
+function resetMineButton() {
   const btn = document.getElementById('btnMine');
   btn.textContent = t('start_mining');
   btn.classList.remove('mining');
@@ -769,40 +871,43 @@ async function submitSolution(nonce, digest) {
   document.getElementById('hashViz').classList.remove('active');
   document.getElementById('miningBadge').textContent = t('mining_idle');
   document.getElementById('miningBadge').classList.remove('active');
+  document.getElementById('uptimeRow').style.display = 'none';
 }
 
 // ─── History ───
 function addHistoryEntry(entry) {
   miningHistory.unshift(entry);
+  saveHistory();
   renderHistory();
 }
 
 function renderHistory() {
   const container = document.getElementById('historyContent');
   if (miningHistory.length === 0) {
-    container.innerHTML = `<div class="no-records" data-i18n="no_records">${t('no_records')}</div>`;
+    container.innerHTML = '<div class="no-records">' + t('no_records') + '</div>';
     return;
   }
-  let html = `<table class="history-table"><thead><tr>
-    <th data-i18n="time">${t('time')}</th>
-    <th data-i18n="nonce">${t('nonce')}</th>
-    <th data-i18n="reward">${t('reward')}</th>
-    <th data-i18n="tx_hash">${t('tx_hash')}</th>
-    <th data-i18n="status">${t('status')}</th>
-  </tr></thead><tbody>`;
+  let html = '<table class="history-table"><thead><tr>' +
+    '<th>' + t('time') + '</th>' +
+    '<th>' + t('nonce') + '</th>' +
+    '<th>' + t('reward') + '</th>' +
+    '<th>' + t('tx_hash') + '</th>' +
+    '<th>' + t('status') + '</th>' +
+    '</tr></thead><tbody>';
   for (const e of miningHistory) {
-    const statusClass = e.status === 'Success' ? 'status-ok' : (e.status === 'Skipped' ? 'status-skip' : 'status-fail');
+    const sc = e.status === 'Success' ? 'status-ok' : (e.status === 'Skipped' ? 'status-skip' : 'status-fail');
+    const statusText = e.status === 'Success' ? t('success') : (e.status === 'Skipped' ? t('skipped') : t('failed'));
     const txDisplay = e.tx_hash && e.tx_hash.length > 20
-      ? `<a class="tx-link" href="https://bscscan.com/tx/${e.tx_hash}" target="_blank" rel="noopener">${e.tx_hash.slice(0,10)}...${e.tx_hash.slice(-6)}</a>`
+      ? '<a class="tx-link" href="https://bscscan.com/tx/' + e.tx_hash + '" target="_blank" rel="noopener">' + e.tx_hash.slice(0,10) + '...' + e.tx_hash.slice(-6) + '</a>'
       : (e.tx_hash || 'N/A');
     const nonceDisplay = e.nonce && e.nonce.length > 14 ? e.nonce.slice(0,14) + '...' : e.nonce;
-    html += `<tr>
-      <td>${e.time}</td>
-      <td>${nonceDisplay}</td>
-      <td style="color:var(--accent)">${e.reward}</td>
-      <td>${txDisplay}</td>
-      <td class="${statusClass}">${e.status}</td>
-    </tr>`;
+    html += '<tr>' +
+      '<td>' + e.time + '</td>' +
+      '<td>' + nonceDisplay + '</td>' +
+      '<td style="color:var(--accent)">' + e.reward + '</td>' +
+      '<td>' + txDisplay + '</td>' +
+      '<td class="' + sc + '">' + statusText + '</td>' +
+      '</tr>';
   }
   html += '</tbody></table>';
   container.innerHTML = html;
@@ -810,24 +915,29 @@ function renderHistory() {
 
 // ─── Settings ───
 function saveSettings() {
-  const toast = document.createElement('div');
-  toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--accent);color:var(--accent);padding:10px 24px;border-radius:4px;font-size:.85rem;font-weight:600;z-index:9999;font-family:var(--font-mono)';
-  toast.textContent = t('settings_saved');
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 2500);
+  try {
+    localStorage.setItem('satoshi_settings', JSON.stringify({
+      rpc: document.getElementById('rpcInput').value,
+      gasPrice: document.getElementById('gasPriceInput').value,
+      gasLimit: document.getElementById('gasLimitInput').value
+    }));
+  } catch(e) {}
+  showToast(t('settings_saved'));
 }
 
-// ─── Listen for account/chain changes ───
+// ─── MetaMask events ───
 if (window.ethereum) {
   window.ethereum.on('accountsChanged', () => location.reload());
   window.ethereum.on('chainChanged', () => location.reload());
 }
 
 // ─── Init ───
+loadSettings();
+loadHistory();
+renderHistory();
 log(t('log_ready'), 'info');
 log(t('log_contract') + CA, 'info');
 log(t('log_connect_prompt'), 'info');
-</script>
 </script>
 </body>
 </html>
