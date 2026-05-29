@@ -203,7 +203,7 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
     </div>
     <div class="sidebar-bottom">
       <button class="lang-btn" onclick="toggleLang()" id="langBtn">中文</button>
-      <span class="version-text">v2.0.0</span>
+      <span class="version-text">v2.1.0</span>
     </div>
   </div>
 
@@ -224,7 +224,7 @@ body{min-height:100vh;min-height:100dvh;overflow-x:hidden;display:flex;flex-dire
           </div>
           <div class="card-sep"></div>
           <label class="form-label" data-i18n="rpc_url">RPC Endpoint</label>
-          <input class="form-input" id="rpcInput" value="https://bsc-dataseed1.binance.org" style="margin-bottom:12px">
+          <input class="form-input" id="rpcInput" value="https://bsc-dataseed.bnbchain.org" style="margin-bottom:12px">
           <label class="form-label" data-i18n="private_key">Private Key</label>
           <div class="input-row" style="margin-bottom:16px">
             <input class="form-input" id="pkInput" type="password" placeholder="0x...">
@@ -531,6 +531,32 @@ let mining = false, hashCount = 0, mineStart = 0, statsTimer = null, uptimeTimer
 let miningHistory = [];
 let pkMode = false;
 
+// ─── RPC 限速器 (防止被公共节点 ban IP) ───
+const RPC_MIN_INTERVAL = 250; // 最小 250ms 间隔 ≈ 每秒最多 4 次 RPC
+let _lastRpcTime = 0;
+let _rpcQueue = Promise.resolve();
+
+function throttledRpc(fn) {
+  _rpcQueue = _rpcQueue.then(() => {
+    const now = Date.now();
+    const wait = Math.max(0, RPC_MIN_INTERVAL - (now - _lastRpcTime));
+    return new Promise(resolve => setTimeout(resolve, wait));
+  }).then(() => {
+    _lastRpcTime = Date.now();
+    return fn();
+  });
+  return _rpcQueue;
+}
+
+// Multicall3 地址 (BSC / 所有 EVM 链通用)
+const MULTICALL3_ADDR = "0xcA11bde05977b3631167028862bE2a173976CA11";
+const MULTICALL3_ABI = ["function aggregate(tuple(address target, bytes callData)[] calls) view returns (uint256 blockNumber, bytes[] returnData)"];
+let multicallContract = null;
+
+// 刷新防抖：至少 5 秒间隔
+let _lastRefreshTime = 0;
+const REFRESH_COOLDOWN = 5000;
+
 // ─── Persist settings & history to localStorage ───
 function loadSettings() {
   try {
@@ -576,7 +602,7 @@ async function connectWallet() {
 
   if (pk) {
     try {
-      const rpcProvider = new ethers.JsonRpcProvider(rpc || "https://bsc-dataseed1.binance.org");
+      const rpcProvider = new ethers.JsonRpcProvider(rpc || "https://bsc-dataseed.bnbchain.org");
       const wallet = new ethers.Wallet(pk, rpcProvider);
       provider = rpcProvider;
       signer = wallet;
@@ -602,7 +628,7 @@ async function connectWallet() {
         await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{
           chainId: BSC_ID, chainName: "BNB Smart Chain",
           nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
-          rpcUrls: ["https://bsc-dataseed1.binance.org"],
+          rpcUrls: ["https://bsc-dataseed.bnbchain.org"],
           blockExplorerUrls: ["https://bscscan.com"]
         }]});
       }
@@ -625,32 +651,79 @@ function onConnected() {
   document.getElementById('statusText').textContent = t('connected');
   document.getElementById('btnConnect').textContent = t('connected');
   document.getElementById('btnMine').disabled = false;
+
+  // 初始化 Multicall3 批量调用（降低 RPC 访问量 60%+）
+  try {
+    multicallContract = new ethers.Contract(MULTICALL3_ADDR, MULTICALL3_ABI, provider);
+    log('Multicall3 已启用（RPC 调用量大幅降低）', 'success');
+  } catch (e) {
+    multicallContract = null;
+    log('[警告] Multicall3 不可用，使用单次调用模式', 'warn');
+  }
+
   log(t('log_connected') + userAddr.slice(0, 8) + '...', 'success');
   showToast(t('connected'));
   refreshData();
 }
 
-// ─── Refresh on-chain data ───
+// ─── Refresh on-chain data (Multicall3 批量调用 + 防抖) ───
 async function refreshData() {
   if (!contract || !userAddr) return;
-  try {
-    const [epoch, diff, target, reward, minted, era] = await Promise.all([
-      contract.epochCount(), contract.getMiningDifficulty(), contract.miningTarget(),
-      contract.getMiningReward(), contract.tokensMinted(), contract.rewardEra()
-    ]);
-    const bnbBal = await provider.getBalance(userAddr);
-    const satBal = await contract.balanceOf(userAddr);
+  const now = Date.now();
+  if (now - _lastRefreshTime < REFRESH_COOLDOWN) return;
+  _lastRefreshTime = now;
 
-    document.getElementById('vEpoch').textContent = epoch.toString();
-    document.getElementById('vDiff').textContent = Number(diff).toLocaleString();
-    const rewardFmt = ethers.formatUnits(reward, 8);
-    document.getElementById('vReward').textContent = rewardFmt + ' SAT';
-    document.getElementById('vMinted').textContent = Number(ethers.formatUnits(minted, 8)).toLocaleString() + ' / 21M';
-    document.getElementById('vEra').textContent = era.toString();
-    document.getElementById('vBnb').textContent = Number(ethers.formatEther(bnbBal)).toFixed(6);
-    const satFmt = ethers.formatUnits(satBal, 8);
-    document.getElementById('vSat').textContent = satFmt;
-    document.getElementById('bigBalance').textContent = satFmt + ' SAT';
+  try {
+    // 使用 Multicall3 将 6 个合约查询合并为 1 次 RPC（原来 6 次）
+    if (multicallContract) {
+      const iface = new ethers.Interface(ABI);
+      const calls = [
+        { target: CA, callData: iface.encodeFunctionData('epochCount') },
+        { target: CA, callData: iface.encodeFunctionData('getMiningDifficulty') },
+        { target: CA, callData: iface.encodeFunctionData('getMiningReward') },
+        { target: CA, callData: iface.encodeFunctionData('tokensMinted') },
+        { target: CA, callData: iface.encodeFunctionData('rewardEra') },
+        { target: CA, callData: iface.encodeFunctionData('balanceOf', [userAddr]) },
+      ];
+      const [, returnData] = await throttledRpc(() => multicallContract.aggregate(calls));
+      const epoch = iface.decodeFunctionResult('epochCount', returnData[0])[0];
+      const diff = iface.decodeFunctionResult('getMiningDifficulty', returnData[1])[0];
+      const reward = iface.decodeFunctionResult('getMiningReward', returnData[2])[0];
+      const minted = iface.decodeFunctionResult('tokensMinted', returnData[3])[0];
+      const era = iface.decodeFunctionResult('rewardEra', returnData[4])[0];
+      const satBal = iface.decodeFunctionResult('balanceOf', returnData[5])[0];
+      const bnbBal = await throttledRpc(() => provider.getBalance(userAddr));
+
+      document.getElementById('vEpoch').textContent = epoch.toString();
+      document.getElementById('vDiff').textContent = Number(diff).toLocaleString();
+      const rewardFmt = ethers.formatUnits(reward, 8);
+      document.getElementById('vReward').textContent = rewardFmt + ' SAT';
+      document.getElementById('vMinted').textContent = Number(ethers.formatUnits(minted, 8)).toLocaleString() + ' / 21M';
+      document.getElementById('vEra').textContent = era.toString();
+      document.getElementById('vBnb').textContent = Number(ethers.formatEther(bnbBal)).toFixed(6);
+      const satFmt = ethers.formatUnits(satBal, 8);
+      document.getElementById('vSat').textContent = satFmt;
+      document.getElementById('bigBalance').textContent = satFmt + ' SAT';
+    } else {
+      // Multicall 不可用时降级为逐个调用（带限速）
+      const [epoch, diff, reward, minted, era] = await throttledRpc(() => Promise.all([
+        contract.epochCount(), contract.getMiningDifficulty(),
+        contract.getMiningReward(), contract.tokensMinted(), contract.rewardEra()
+      ]));
+      const bnbBal = await throttledRpc(() => provider.getBalance(userAddr));
+      const satBal = await throttledRpc(() => contract.balanceOf(userAddr));
+
+      document.getElementById('vEpoch').textContent = epoch.toString();
+      document.getElementById('vDiff').textContent = Number(diff).toLocaleString();
+      const rewardFmt = ethers.formatUnits(reward, 8);
+      document.getElementById('vReward').textContent = rewardFmt + ' SAT';
+      document.getElementById('vMinted').textContent = Number(ethers.formatUnits(minted, 8)).toLocaleString() + ' / 21M';
+      document.getElementById('vEra').textContent = era.toString();
+      document.getElementById('vBnb').textContent = Number(ethers.formatEther(bnbBal)).toFixed(6);
+      const satFmt = ethers.formatUnits(satBal, 8);
+      document.getElementById('vSat').textContent = satFmt;
+      document.getElementById('bigBalance').textContent = satFmt + ' SAT';
+    }
   } catch (e) {
     log(t('log_refresh_fail') + e.message, 'error');
   }
@@ -702,7 +775,7 @@ async function startMining() {
   document.getElementById('uptimeRow').style.display = 'flex';
   log(t('log_mining_start'), 'success');
 
-  statsTimer = setInterval(updateStats, 500);
+  statsTimer = setInterval(updateStats, 2000);
   uptimeTimer = setInterval(() => {
     document.getElementById('sUptime').textContent = formatUptime(Date.now() - mineStart);
   }, 1000);
@@ -719,9 +792,21 @@ function updateStats() {
 async function mineLoop() {
   let challengeNumber, miningTarget;
   try {
-    [challengeNumber, miningTarget] = await Promise.all([
-      contract.challengeNumber(), contract.miningTarget()
-    ]);
+    // 用 Multicall3 批量获取 challenge + target（2 次 → 1 次 RPC）
+    if (multicallContract) {
+      const iface = new ethers.Interface(ABI);
+      const calls = [
+        { target: CA, callData: iface.encodeFunctionData('challengeNumber') },
+        { target: CA, callData: iface.encodeFunctionData('miningTarget') },
+      ];
+      const [, returnData] = await throttledRpc(() => multicallContract.aggregate(calls));
+      challengeNumber = iface.decodeFunctionResult('challengeNumber', returnData[0])[0];
+      miningTarget = iface.decodeFunctionResult('miningTarget', returnData[1])[0];
+    } else {
+      [challengeNumber, miningTarget] = await throttledRpc(() => Promise.all([
+        contract.challengeNumber(), contract.miningTarget()
+      ]));
+    }
     log(t('log_challenge') + challengeNumber.slice(0, 18) + '...');
   } catch (e) {
     log(t('log_challenge_fail') + e.message, 'error');
@@ -733,6 +818,7 @@ async function mineLoop() {
   let nonce = BigInt("0x" + ethers.hexlify(rnd).slice(2));
   const CHUNK = 3000;
   let checkCounter = 0;
+  const CHALLENGE_CHECK_INTERVAL = 150000; // 每 15 万次哈希检查一次 challenge（原 6 万）
 
   function chunk() {
     if (!mining) return;
@@ -759,9 +845,9 @@ async function mineLoop() {
     document.getElementById('hashViz').textContent = lastDigest;
 
     checkCounter += CHUNK;
-    if (checkCounter >= 60000) {
+    if (checkCounter >= CHALLENGE_CHECK_INTERVAL) {
       checkCounter = 0;
-      contract.challengeNumber().then(newCh => {
+      throttledRpc(() => contract.challengeNumber()).then(newCh => {
         if (newCh !== challengeNumber) {
           log(t('log_challenge_updated'), 'warn');
           refreshData();
@@ -777,20 +863,32 @@ async function mineLoop() {
   chunk();
 }
 
-// ─── Pre-validation (like the Python version) ───
+// ─── Pre-validation (Multicall3 批量 + 限速) ───
 async function preValidateSolution(nonce, digest, challenge) {
   try {
-    const currentChallenge = await contract.challengeNumber();
+    let currentChallenge, currentTarget;
+    if (multicallContract) {
+      const iface = new ethers.Interface(ABI);
+      const calls = [
+        { target: CA, callData: iface.encodeFunctionData('challengeNumber') },
+        { target: CA, callData: iface.encodeFunctionData('miningTarget') },
+      ];
+      const [, returnData] = await throttledRpc(() => multicallContract.aggregate(calls));
+      currentChallenge = iface.decodeFunctionResult('challengeNumber', returnData[0])[0];
+      currentTarget = iface.decodeFunctionResult('miningTarget', returnData[1])[0];
+    } else {
+      currentChallenge = await throttledRpc(() => contract.challengeNumber());
+      currentTarget = await throttledRpc(() => contract.miningTarget());
+    }
     if (currentChallenge !== challenge) {
       return { valid: false, reason: t('log_solution_already') };
     }
-    const currentTarget = await contract.miningTarget();
     if (BigInt(digest) > currentTarget) {
       return { valid: false, reason: 'Digest exceeds current target' };
     }
     // Simulate call
     const readContract = new ethers.Contract(CA, ABI, provider);
-    await readContract.mint.staticCall(nonce, digest, { from: userAddr });
+    await throttledRpc(() => readContract.mint.staticCall(nonce, digest, { from: userAddr }));
     return { valid: true, reason: '' };
   } catch (e) {
     const msg = e.message || '';
