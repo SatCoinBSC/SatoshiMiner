@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Satoshi (SAT) Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0e17;--bg2:#111827;--bg3:#1a2236;--bg4:#0f1629;
+  --accent:#f7931a;--accent2:#e8850f;--accent-glow:rgba(247,147,26,.12);
+  --green:#10b981;--green-dim:#059669;--red:#ef4444;--blue:#3b82f6;--purple:#8b5cf6;--cyan:#06b6d4;
+  --text:#e5e7eb;--text2:#9ca3af;--text3:#4b5563;
+  --border:#1f2937;--border2:#374151;
+  --font-mono:'JetBrains Mono','Consolas',monospace;--font-display:'Orbitron',sans-serif;
+}
+html{font-size:14px;background:var(--bg);color:var(--text);font-family:var(--font-mono)}
+body{min-height:100vh;overflow-x:hidden}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Header */
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.header-left{display:flex;align-items:center;gap:12px}
+.logo-icon{width:44px;height:44px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:900;color:#000;font-family:var(--font-display);flex-shrink:0}
+.logo-title{font-family:var(--font-display);font-size:1.2rem;font-weight:700;color:#fff;letter-spacing:2px}
+.logo-sub{font-size:.65rem;color:var(--text3);margin-top:2px}
+.header-right{display:flex;align-items:center;gap:12px}
+.lang-btn{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);font-family:var(--font-mono);font-size:.75rem;padding:6px 14px;cursor:pointer;border-radius:6px;transition:all .2s}
+.lang-btn:hover{color:var(--accent);border-color:var(--accent)}
+.refresh-btn{background:var(--accent);border:none;color:#000;font-family:var(--font-mono);font-size:.75rem;padding:6px 14px;cursor:pointer;border-radius:6px;font-weight:700;transition:all .2s}
+.refresh-btn:hover{background:var(--accent2)}
+.refresh-btn:disabled{opacity:.5;cursor:not-allowed}
+.status-pill{display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text2)}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);animation:none}
+.status-dot.ok{background:var(--green);animation:pulse 2s infinite}
+.status-dot.err{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Layout */
+.container{max-width:1280px;margin:0 auto;padding:20px 24px 40px}
+
+/* Cards */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border-color .2s}
+.card:hover{border-color:var(--border2)}
+.card-head{padding:14px 18px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
+.card-head .icon{font-size:1.1rem;color:var(--accent)}
+.card-head .title{font-size:.85rem;font-weight:700;color:#fff}
+.card-body{padding:18px}
+
+/* Stats grid */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px 18px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.stat-card.orange::before{background:var(--accent)}
+.stat-card.green::before{background:var(--green)}
+.stat-card.blue::before{background:var(--blue)}
+.stat-card.purple::before{background:var(--purple)}
+.stat-card.cyan::before{background:var(--cyan)}
+.stat-card.red::before{background:var(--red)}
+.stat-label{font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
+.stat-value{font-size:1.15rem;font-weight:700;color:#fff;word-break:break-all}
+.stat-value.orange{color:var(--accent)}
+.stat-value.green{color:var(--green)}
+.stat-value.blue{color:var(--blue)}
+.stat-value.purple{color:var(--purple)}
+.stat-value.cyan{color:var(--cyan)}
+.stat-sub{font-size:.65rem;color:var(--text3);margin-top:4px}
+
+/* Progress bar */
+.progress-wrap{margin-top:20px}
+.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.progress-title{font-size:.75rem;font-weight:600;color:var(--text2)}
+.progress-pct{font-size:.85rem;font-weight:700;color:var(--accent)}
+.progress-bar{height:12px;background:var(--bg4);border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),#f59e0b);border-radius:6px;transition:width 1s ease;position:relative}
+.progress-fill::after{content:'';position:absolute;top:0;right:0;bottom:0;width:40px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.15));animation:shimmer 2s infinite}
+@keyframes shimmer{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
+.progress-labels{display:flex;justify-content:space-between;margin-top:6px;font-size:.6rem;color:var(--text3)}
+
+/* Two-col layout */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+
+/* Chart */
+.chart-wrap{position:relative;height:260px;padding:8px}
+
+/* Info rows */
+.info-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(31,41,55,.6)}
+.info-row:last-child{border-bottom:none}
+.info-key{color:var(--text2);font-size:.8rem}
+.info-val{color:#fff;font-weight:600;font-size:.8rem;text-align:right;max-width:65%;word-break:break-all}
+
+/* Halving table */
+.halving-table{width:100%;border-collapse:collapse;font-size:.72rem}
+.halving-table th{text-align:left;padding:8px;color:var(--accent);font-size:.6rem;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border);font-weight:700}
+.halving-table td{padding:8px;border-bottom:1px solid rgba(31,41,55,.4);color:var(--text2)}
+.halving-table tr.current{background:var(--accent-glow)}
+.halving-table tr.current td{color:var(--accent);font-weight:600}
+
+/* Footer */
+.footer{text-align:center;padding:24px;color:var(--text3);font-size:.65rem;border-top:1px solid var(--border);margin-top:24px}
+.footer a{color:var(--accent)}
+
+/* Loading skeleton */
+.loading{color:var(--text3);animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Responsive */
+@media(max-width:900px){
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .two-col{grid-template-columns:1fr}
+}
+@media(max-width:500px){
+  .stats-row{grid-template-columns:1fr}
+  .header{padding:12px 16px}
+  .container{padding:12px 16px 32px}
+  .logo-title{font-size:1rem}
+}
+</style>
+</head>
+<body>
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo-icon">S</div>
+    <div>
+      <div class="logo-title">Satoshi (SAT)</div>
+      <div class="logo-sub" data-i18n="subtitle">BSC PoW Token Dashboard</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText" data-i18n="loading">Loading...</span>
+    </div>
+    <button class="lang-btn" onclick="toggleLang()" id="langBtn">中文</button>
+    <button class="refresh-btn" onclick="loadData()" id="refreshBtn" data-i18n="refresh">Refresh</button>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Top Stats -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card orange">
+      <div class="stat-label" data-i18n="total_supply">TOTAL SUPPLY</div>
+      <div class="stat-value orange" id="vSupply"><span class="loading">--</span></div>
+      <div class="stat-sub" data-i18n="max_21m">Max: 21,000,000 SAT</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label" data-i18n="total_mined">TOTAL MINED</div>
+      <div class="stat-value green" id="vMinted"><span class="loading">--</span></div>
+      <div class="stat-sub" id="vMinedPct">--</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label" data-i18n="block_reward">BLOCK REWARD</div>
+      <div class="stat-value blue" id="vReward"><span class="loading">--</span></div>
+      <div class="stat-sub" id="vEraInfo">--</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label" data-i18n="difficulty">DIFFICULTY</div>
+      <div class="stat-value purple" id="vDiff"><span class="loading">--</span></div>
+      <div class="stat-sub" id="vEpochInfo">--</div>
+    </div>
+  </div>
+
+  <!-- Mining Progress -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-head">
+      <span class="icon">&#x26CF;</span>
+      <span class="title" data-i18n="mining_progress">Mining Progress</span>
+    </div>
+    <div class="card-body">
+      <div class="progress-wrap">
+        <div class="progress-header">
+          <span class="progress-title" data-i18n="mined_of_total">Mined / Total Supply</span>
+          <span class="progress-pct" id="progressPct">--%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div class="progress-labels">
+          <span>0 SAT</span>
+          <span id="progressMined">--</span>
+          <span>21,000,000 SAT</span>
+        </div>
+      </div>
+      <div class="stats-row" style="margin-top:18px;margin-bottom:0">
+        <div class="stat-card cyan">
+          <div class="stat-label" data-i18n="epoch">EPOCH</div>
+          <div class="stat-value cyan" id="vEpoch"><span class="loading">--</span></div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-label" data-i18n="reward_era">REWARD ERA</div>
+          <div class="stat-value orange" id="vEra"><span class="loading">--</span></div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-label" data-i18n="last_reward_to">LAST REWARD TO</div>
+          <div class="stat-value" id="vLastTo" style="font-size:.72rem"><span class="loading">--</span></div>
+        </div>
+        <div class="stat-card red">
+          <div class="stat-label" data-i18n="last_reward_amt">LAST REWARD</div>
+          <div class="stat-value" id="vLastAmt" style="color:var(--red)"><span class="loading">--</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Two-col: Chart + Info -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-head">
+        <span class="icon">&#x1F4C8;</span>
+        <span class="title" data-i18n="halving_chart">Halving & Supply Chart</span>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap"><canvas id="supplyChart"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="icon">&#x1F4CB;</span>
+        <span class="title" data-i18n="halving_schedule">Halving Schedule</span>
+      </div>
+      <div class="card-body" style="padding:0" id="halvingTableWrap">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Two-col: Contract Info + Mining Params -->
+  <div class="two-col" style="margin-top:16px">
+    <div class="card">
+      <div class="card-head">
+        <span class="icon">&#x1F4DC;</span>
+        <span class="title" data-i18n="contract_info">Contract Info</span>
+      </div>
+      <div class="card-body">
+        <div class="info-row"><span class="info-key" data-i18n="network">Network</span><span class="info-val">BNB Smart Chain (BSC)</span></div>
+        <div class="info-row"><span class="info-key" data-i18n="contract_addr">Contract</span><span class="info-val"><a href="https://bscscan.com/address/0x14Dc4b4929c664534f1d4D64107d8F36CbF906a0" target="_blank">0x14Dc...06a0</a></span></div>
+        <div class="info-row"><span class="info-key" data-i18n="token_name">Token</span><span class="info-val">Satoshi (SAT)</span></div>
+        <div class="info-row"><span class="info-key">Decimals</span><span class="info-val">8</span></div>
+        <div class="info-row"><span class="info-key" data-i18n="max_supply">Max Supply</span><span class="info-val">21,000,000 SAT</span></div>
+        <div class="info-row"><span class="info-key" data-i18n="consensus">Consensus</span><span class="info-val">Proof of Work (keccak256)</span></div>
+        <div class="info-row"><span class="info-key" data-i18n="diff_adjust">Difficulty Adjust</span><span class="info-val" data-i18n="every_1024">Every 1024 epochs</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="icon">&#x2699;</span>
+        <span class="title" data-i18n="mining_params">Mining Parameters</span>
+      </div>
+      <div class="card-body">
+        <div class="info-row"><span class="info-key" data-i18n="challenge_number">Challenge Number</span><span class="info-val" id="vChallenge" style="font-size:.68rem"><span class="loading">--</span></span></div>
+        <div class="info-row"><span class="info-key" data-i18n="mining_target">Mining Target</span><span class="info-val" id="vTarget" style="font-size:.68rem"><span class="loading">--</span></span></div>
+        <div class="info-row"><span class="info-key" data-i18n="difficulty">Difficulty</span><span class="info-val" id="vDiff2"><span class="loading">--</span></span></div>
+        <div class="info-row"><span class="info-key" data-i18n="blocks_per_adj">Blocks/Readjust</span><span class="info-val">1,024</span></div>
+        <div class="info-row"><span class="info-key" data-i18n="next_adjust">Next Adjustment</span><span class="info-val" id="vNextAdj"><span class="loading">--</span></span></div>
+        <div class="info-row"><span class="info-key" data-i18n="min_target">Min Target</span><span class="info-val">2^16</span></div>
+        <div class="info-row"><span class="info-key" data-i18n="max_target">Max Target</span><span class="info-val">2^234</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  Satoshi (SAT) on BSC &mdash; <a href="https://bscscan.com/address/0x14Dc4b4929c664534f1d4D64107d8F36CbF906a0" target="_blank">View on BscScan</a>
+  <br>Data fetched directly from BSC blockchain. Auto-refreshes every 30 seconds.
+</div>
+<script>
+// ─── i18n ───
+const LANG = {
+  en: {
+    subtitle:'BSC PoW Token Dashboard',loading:'Loading...',refresh:'Refresh',
+    total_supply:'TOTAL SUPPLY',total_mined:'TOTAL MINED',block_reward:'BLOCK REWARD',
+    difficulty:'DIFFICULTY',mining_progress:'Mining Progress',mined_of_total:'Mined / Total Supply',
+    epoch:'EPOCH',reward_era:'REWARD ERA',last_reward_to:'LAST REWARD TO',last_reward_amt:'LAST REWARD',
+    halving_chart:'Halving & Supply Chart',halving_schedule:'Halving Schedule',
+    contract_info:'Contract Info',mining_params:'Mining Parameters',
+    network:'Network',contract_addr:'Contract',token_name:'Token',max_supply:'Max Supply',
+    consensus:'Consensus',diff_adjust:'Difficulty Adjust',every_1024:'Every 1024 epochs',
+    challenge_number:'Challenge Number',mining_target:'Mining Target',
+    blocks_per_adj:'Blocks/Readjust',next_adjust:'Next Adjustment',
+    min_target:'Min Target',max_target:'Max Target',max_21m:'Max: 21,000,000 SAT',
+    era_col:'Era',reward_col:'Reward',cumulative_col:'Cumulative',status_col:'Status',
+    current:'Current',completed:'Completed',future:'Future',
+    connected:'Connected',error:'Error',refreshing:'Refreshing...',
+    epochs_left:'epochs until next adjustment',
+    chart_mined:'Mined',chart_remaining:'Remaining',chart_era_supply:'Era Max Supply',
+  },
+  zh: {
+    subtitle:'BSC PoW 代币看板',loading:'加载中...',refresh:'刷新',
+    total_supply:'总供应量',total_mined:'已挖总量',block_reward:'区块奖励',
+    difficulty:'挖矿难度',mining_progress:'挖矿进度',mined_of_total:'已挖 / 总供应量',
+    epoch:'纪元',reward_era:'奖励时代',last_reward_to:'最近出块地址',last_reward_amt:'最近奖励',
+    halving_chart:'减半 & 供应量图表',halving_schedule:'减半计划',
+    contract_info:'合约信息',mining_params:'挖矿参数',
+    network:'网络',contract_addr:'合约地址',token_name:'代币',max_supply:'最大供应量',
+    consensus:'共识机制',diff_adjust:'难度调整',every_1024:'每 1024 个纪元',
+    challenge_number:'挑战号',mining_target:'挖矿目标',
+    blocks_per_adj:'区块/调整',next_adjust:'下次调整',
+    min_target:'最小目标',max_target:'最大目标',max_21m:'上限：21,000,000 SAT',
+    era_col:'时代',reward_col:'奖励',cumulative_col:'累计',status_col:'状态',
+    current:'当前',completed:'已完成',future:'未来',
+    connected:'已连接',error:'错误',refreshing:'刷新中...',
+    epochs_left:'个纪元后调整难度',
+    chart_mined:'已挖出',chart_remaining:'剩余',chart_era_supply:'时代上限',
+  }
+};
+let curLang = 'en';
+function t(k){ return LANG[curLang][k] || k; }
+
+function applyLang(){
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.getAttribute('data-i18n');
+    const v = t(k);
+    if(el.tagName === 'INPUT') el.placeholder = v;
+    else el.textContent = v;
+  });
+  renderHalvingTable();
+  if(window._chartInstance) updateChart();
+}
+
+function toggleLang(){
+  curLang = curLang === 'en' ? 'zh' : 'en';
+  document.getElementById('langBtn').textContent = curLang === 'zh' ? 'EN' : '中文';
+  applyLang();
+}
+
+// ─── Contract ───
+const CA = '0x14Dc4b4929c664534f1d4D64107d8F36CbF906a0';
+const RPC_LIST = [
+  'https://bsc-dataseed.bnbchain.org',
+  'https://bsc-dataseed1.defibit.io',
+  'https://bsc-dataseed1.ninicoin.io',
+  'https://bsc-rpc.publicnode.com'
+];
+const ABI = [
+  'function challengeNumber() view returns (bytes32)',
+  'function miningTarget() view returns (uint256)',
+  'function getMiningDifficulty() view returns (uint256)',
+  'function getMiningReward() view returns (uint256)',
+  'function epochCount() view returns (uint256)',
+  'function tokensMinted() view returns (uint256)',
+  'function rewardEra() view returns (uint256)',
+  'function totalSupply() view returns (uint256)',
+  'function lastRewardTo() view returns (address)',
+  'function lastRewardAmount() view returns (uint256)',
+  'function latestDifficultyPeriodStarted() view returns (uint256)',
+];
+const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
+const MC_ABI = ['function aggregate(tuple(address target, bytes callData)[] calls) view returns (uint256 blockNumber, bytes[] returnData)'];
+
+let provider, contract, mcContract;
+let chainData = {};
+
+async function initProvider(){
+  for(const rpc of RPC_LIST){
+    try{
+      const p = new ethers.JsonRpcProvider(rpc);
+      await p.getBlockNumber();
+      provider = p;
+      contract = new ethers.Contract(CA, ABI, p);
+      mcContract = new ethers.Contract(MULTICALL3, MC_ABI, p);
+      return true;
+    } catch(e){ continue; }
+  }
+  return false;
+}
+
+async function loadData(){
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = t('refreshing');
+  const dot = document.getElementById('statusDot');
+  const stxt = document.getElementById('statusText');
+
+  try{
+    if(!provider) {
+      const ok = await initProvider();
+      if(!ok) throw new Error('All RPCs failed');
+    }
+
+    const iface = new ethers.Interface(ABI);
+    const calls = [
+      'epochCount','getMiningDifficulty','getMiningReward','tokensMinted',
+      'rewardEra','challengeNumber','miningTarget','lastRewardTo',
+      'lastRewardAmount','totalSupply','latestDifficultyPeriodStarted'
+    ].map(fn => ({ target: CA, callData: iface.encodeFunctionData(fn) }));
+
+    const [, returnData] = await mcContract.aggregate(calls);
+    const decode = (fn, idx) => iface.decodeFunctionResult(fn, returnData[idx])[0];
+
+    const epoch = decode('epochCount',0);
+    const diff = decode('getMiningDifficulty',1);
+    const reward = decode('getMiningReward',2);
+    const minted = decode('tokensMinted',3);
+    const era = decode('rewardEra',4);
+    const challenge = decode('challengeNumber',5);
+    const target = decode('miningTarget',6);
+    const lastTo = decode('lastRewardTo',7);
+    const lastAmt = decode('lastRewardAmount',8);
+    const supply = decode('totalSupply',9);
+    const diffStart = decode('latestDifficultyPeriodStarted',10);
+
+    chainData = {epoch,diff,reward,minted,era,challenge,target,lastTo,lastAmt,supply,diffStart};
+    updateUI();
+
+    dot.className = 'status-dot ok';
+    stxt.textContent = t('connected');
+
+  } catch(e){
+    console.error(e);
+    const dot2 = document.getElementById('statusDot');
+    dot2.className = 'status-dot err';
+    document.getElementById('statusText').textContent = t('error') + ': ' + (e.message||'').slice(0,40);
+    provider = null;
+  }
+  btn.disabled = false;
+  btn.textContent = t('refresh');
+}
+
+function updateUI(){
+  const d = chainData;
+  const mintedNum = Number(ethers.formatUnits(d.minted, 8));
+  const maxSupply = 21000000;
+  const pct = (mintedNum / maxSupply * 100);
+
+  document.getElementById('vSupply').textContent = maxSupply.toLocaleString() + ' SAT';
+  document.getElementById('vMinted').textContent = mintedNum.toLocaleString(undefined,{maximumFractionDigits:2}) + ' SAT';
+  document.getElementById('vMinedPct').textContent = pct.toFixed(4) + '% ' + t('chart_mined');
+
+  const rewardFmt = ethers.formatUnits(d.reward, 8);
+  document.getElementById('vReward').textContent = rewardFmt + ' SAT';
+  document.getElementById('vEraInfo').textContent = 'Era ' + d.era.toString();
+
+  document.getElementById('vDiff').textContent = Number(d.diff).toLocaleString();
+  const epochNum = Number(d.epoch);
+  const nextAdj = 1024 - (epochNum % 1024);
+  document.getElementById('vEpochInfo').textContent = 'Epoch ' + epochNum.toLocaleString();
+
+  document.getElementById('progressPct').textContent = pct.toFixed(4) + '%';
+  document.getElementById('progressFill').style.width = Math.min(pct, 100) + '%';
+  document.getElementById('progressMined').textContent = mintedNum.toLocaleString(undefined,{maximumFractionDigits:2}) + ' SAT';
+
+  document.getElementById('vEpoch').textContent = epochNum.toLocaleString();
+  document.getElementById('vEra').textContent = d.era.toString();
+
+  const addr = d.lastTo;
+  document.getElementById('vLastTo').innerHTML = '<a href="https://bscscan.com/address/'+addr+'" target="_blank">'+addr.slice(0,8)+'...'+addr.slice(-6)+'</a>';
+  document.getElementById('vLastAmt').textContent = ethers.formatUnits(d.lastAmt, 8) + ' SAT';
+
+  document.getElementById('vChallenge').textContent = d.challenge.slice(0,20) + '...' + d.challenge.slice(-8);
+  const targetHex = d.target.toString(16);
+  document.getElementById('vTarget').textContent = '0x' + targetHex.slice(0,12) + '...' + (targetHex.length > 12 ? targetHex.slice(-8) : '');
+  document.getElementById('vDiff2').textContent = Number(d.diff).toLocaleString();
+  document.getElementById('vNextAdj').textContent = nextAdj + ' ' + t('epochs_left');
+
+  renderHalvingTable();
+  updateChart();
+}
+
+// ─── Halving Table ───
+function renderHalvingTable(){
+  const currentEra = chainData.era !== undefined ? Number(chainData.era) : -1;
+  const rows = [];
+  for(let i = 0; i < 10; i++){
+    const rw = 50 / Math.pow(2, i);
+    const cumMax = 21000000 - 21000000 / Math.pow(2, i+1);
+    let status = '';
+    let cls = '';
+    if(i < currentEra){ status = t('completed'); cls = ''; }
+    else if(i === currentEra){ status = t('current'); cls = ' class="current"'; }
+    else { status = t('future'); cls = ''; }
+    rows.push('<tr'+cls+'><td>'+i+'</td><td>'+rw.toFixed(8)+' SAT</td><td>'+cumMax.toLocaleString()+' SAT</td><td>'+status+'</td></tr>');
+  }
+  document.getElementById('halvingTableWrap').innerHTML =
+    '<table class="halving-table"><thead><tr><th>'+t('era_col')+'</th><th>'+t('reward_col')+'</th><th>'+t('cumulative_col')+'</th><th>'+t('status_col')+'</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>';
+}
+
+// ─── Chart ───
+function updateChart(){
+  const ctx = document.getElementById('supplyChart');
+  if(window._chartInstance) window._chartInstance.destroy();
+
+  const mintedNum = chainData.minted ? Number(ethers.formatUnits(chainData.minted, 8)) : 0;
+  const maxSupply = 21000000;
+  const remaining = maxSupply - mintedNum;
+
+  // Build era data for bar chart
+  const eraLabels = [];
+  const eraSupply = [];
+  const eraMinedData = [];
+  const currentEra = chainData.era !== undefined ? Number(chainData.era) : 0;
+
+  for(let i = 0; i <= Math.max(currentEra + 3, 5); i++){
+    eraLabels.push('Era ' + i);
+    const eraMax = maxSupply - maxSupply / Math.pow(2, i+1);
+    const prevMax = i === 0 ? 0 : maxSupply - maxSupply / Math.pow(2, i);
+    const eraAmount = eraMax - prevMax;
+    eraSupply.push(eraAmount);
+
+    if(i < currentEra){
+      eraMinedData.push(eraAmount);
+    } else if(i === currentEra){
+      const prevCum = i === 0 ? 0 : maxSupply - maxSupply / Math.pow(2, i);
+      const minedInEra = Math.max(0, mintedNum - prevCum);
+      eraMinedData.push(minedInEra);
+    } else {
+      eraMinedData.push(0);
+    }
+  }
+
+  window._chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: eraLabels,
+      datasets: [
+        {
+          label: t('chart_mined'),
+          data: eraMinedData,
+          backgroundColor: 'rgba(16,185,129,.7)',
+          borderColor: '#10b981',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: t('chart_era_supply'),
+          data: eraSupply,
+          backgroundColor: 'rgba(247,147,26,.2)',
+          borderColor: '#f7931a',
+          borderWidth: 1,
+          borderRadius: 4,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: { color: '#9ca3af', font: { family: "'JetBrains Mono'", size: 11 } }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#4b5563', font: { family: "'JetBrains Mono'", size: 10 } }, grid: { color: 'rgba(31,41,55,.5)' } },
+        y: {
+          ticks: {
+            color: '#4b5563',
+            font: { family: "'JetBrains Mono'", size: 10 },
+            callback: v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : v
+          },
+          grid: { color: 'rgba(31,41,55,.5)' }
+        }
+      }
+    }
+  });
+}
+
+// ─── Auto-refresh ───
+loadData();
+setInterval(loadData, 30000);
+renderHalvingTable();
+</script>
+</body>
+</html>
